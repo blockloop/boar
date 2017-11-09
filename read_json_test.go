@@ -18,7 +18,7 @@ func TestReadJSONParsesJSONBody(t *testing.T) {
 	}`)
 	r := httptest.NewRequest(http.MethodGet, "/", body)
 
-	c := NewContext(r, nil)
+	c := NewContext(r, nil, nil)
 
 	type myStruct struct {
 		Name string `json:"name"`
@@ -36,7 +36,7 @@ func TestReadJSONReturnsErrorIfJSONIsInvalid(t *testing.T) {
 	body := bytes.NewBufferString(`}`)
 	r := httptest.NewRequest(http.MethodGet, "/", body)
 
-	c := NewContext(r, nil)
+	c := NewContext(r, nil, nil)
 
 	var req json.RawMessage
 	err := c.ReadJSON(&req)
@@ -48,7 +48,7 @@ func TestReadJSONSetsBadRequestStatusIfJSONIsInvalid(t *testing.T) {
 	body := bytes.NewBufferString(`}`)
 	r := httptest.NewRequest(http.MethodGet, "/", body)
 
-	c := NewContext(r, nil)
+	c := NewContext(r, nil, nil)
 
 	var req json.RawMessage
 	err := c.ReadJSON(&req).(*HTTPError)
@@ -59,7 +59,7 @@ func TestReadJSONReturnsValidationErrorIfValidationFails(t *testing.T) {
 	body := bytes.NewBufferString(`{ "age": "brett" }`)
 	r := httptest.NewRequest(http.MethodGet, "/", body)
 
-	c := NewContext(r, nil)
+	c := NewContext(r, nil, nil)
 
 	type myStruct struct {
 		Age string `json:"age" valid:"numeric"`
@@ -77,7 +77,7 @@ func TestReadJSONSetsBadRequestStatusIfValidationFails(t *testing.T) {
 	r := httptest.NewRequest(http.MethodGet, "/", body)
 	w := httptest.NewRecorder()
 
-	c := NewContext(r, w)
+	c := NewContext(r, w, nil)
 
 	type myStruct struct {
 		Age string `json:"age" valid:"numeric"`

@@ -11,7 +11,7 @@ import (
 func TestReadQueryShouldReturnValidationRequestWithBadTypes(t *testing.T) {
 	r := httptest.NewRequest(http.MethodGet, "/?Age=hello", nil)
 
-	c := NewContext(r, nil)
+	c := NewContext(r, nil, nil)
 
 	var q struct {
 		Age int
@@ -25,7 +25,7 @@ func TestReadQueryShouldReturnValidationRequestWithBadTypes(t *testing.T) {
 func TestReadQueryShouldMentionCauseField(t *testing.T) {
 	r := httptest.NewRequest(http.MethodGet, "/?Age=hello", nil)
 
-	c := NewContext(r, nil)
+	c := NewContext(r, nil, nil)
 
 	var q struct {
 		Age int
@@ -39,7 +39,7 @@ func TestReadQueryShouldMentionCauseField(t *testing.T) {
 func TestReadQueryShouldMentionType(t *testing.T) {
 	r := httptest.NewRequest(http.MethodGet, "/?Age=hello", nil)
 
-	c := NewContext(r, nil)
+	c := NewContext(r, nil, nil)
 
 	var q struct {
 		Age int
@@ -53,7 +53,7 @@ func TestReadQueryShouldMentionType(t *testing.T) {
 func TestReadQueryShouldSetBadRequestStatus(t *testing.T) {
 	r := httptest.NewRequest(http.MethodGet, "/?Age=hello", nil)
 
-	c := NewContext(r, nil)
+	c := NewContext(r, nil, nil)
 
 	var q struct {
 		Age int

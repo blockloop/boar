@@ -7,7 +7,8 @@ import (
 	"sync"
 
 	"github.com/asaskevich/govalidator"
-	"github.com/blockloop/boar/query"
+	"github.com/blockloop/boar/bind"
+	"github.com/julienschmidt/httprouter"
 	"github.com/pkg/errors"
 )
 
@@ -39,19 +40,27 @@ type Context interface {
 
 	// Status returns the currently set status. This is useful for middlewares
 	Status() int
+
+	// URLParams returns all params as a key/value pair for quick lookups
+	URLParams() httprouter.Params
+
+	// ReadURLParams maps all URL parameters to struct fields of v and returns
+	// a validation error if there are any type mismatches
+	ReadURLParams(v interface{}) error
 }
 
 // NewContext creates a new Context based on the rquest and response writer given
-func NewContext(r *http.Request, w http.ResponseWriter) Context {
-	return newRequestContext(r, w)
+func NewContext(r *http.Request, w http.ResponseWriter, ps httprouter.Params) Context {
+	return newContext(r, w, ps)
 }
 
-func newRequestContext(r *http.Request, w http.ResponseWriter) *requestContext {
+func newContext(r *http.Request, w http.ResponseWriter, ps httprouter.Params) *requestContext {
 	return &requestContext{
 		response:   w,
 		request:    r,
 		onceStatus: &sync.Once{},
 		status:     http.StatusOK,
+		urlParams:  ps,
 	}
 }
 
@@ -60,10 +69,19 @@ type requestContext struct {
 	request    *http.Request
 	status     int
 	onceStatus *sync.Once
+	urlParams  httprouter.Params
 }
 
 func (r *requestContext) Context() context.Context {
 	return r.Request().Context()
+}
+
+func (r *requestContext) ReadURLParams(v interface{}) error {
+	return bind.Params(v, r.URLParams())
+}
+
+func (r *requestContext) URLParams() httprouter.Params {
+	return r.urlParams
 }
 
 func (r *requestContext) WriteHeader(status int) {
@@ -104,7 +122,7 @@ func (r *requestContext) WriteJSON(status int, v interface{}) error {
 }
 
 func (r *requestContext) ReadQuery(v interface{}) error {
-	if err := query.Parse(v, r.Request()); err != nil {
+	if err := bind.Query(v, r.Request().URL.Query()); err != nil {
 		return NewValidationError(err)
 	}
 	return nil

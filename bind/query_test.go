@@ -1,4 +1,4 @@
-package query
+package bind
 
 import (
 	"net/http"
@@ -16,19 +16,19 @@ func TestParseShouldLookupByFieldName(t *testing.T) {
 
 	var qp QueryParams
 	r := httptest.NewRequest(http.MethodGet, "/?Name=brett", nil)
-	err := Parse(&qp, r)
+	err := Query(&qp, r.URL.Query())
 	require.NoError(t, err)
 	require.Equal(t, "brett", qp.Name)
 }
 
 func TestParseShouldLookupUsingTag(t *testing.T) {
 	type QueryParams struct {
-		Name string `q:"name"`
+		Name string `query:"name"`
 	}
 
 	var qp QueryParams
 	r := httptest.NewRequest(http.MethodGet, "/?name=brett", nil)
-	err := Parse(&qp, r)
+	err := Query(&qp, r.URL.Query())
 	require.NoError(t, err)
 	require.Equal(t, "brett", qp.Name)
 }
@@ -40,7 +40,7 @@ func TestParseShouldIgnorePrivateFields(t *testing.T) {
 
 	var qp QueryParams
 	r := httptest.NewRequest(http.MethodGet, "/?name=brett", nil)
-	err := Parse(&qp, r)
+	err := Query(&qp, r.URL.Query())
 	require.NoError(t, err)
 	require.Equal(t, "", qp.name)
 }
@@ -52,7 +52,7 @@ func TestParseShouldSetIntegers(t *testing.T) {
 
 	var qp QueryParams
 	r := httptest.NewRequest(http.MethodGet, "/?Age=1", nil)
-	err := Parse(&qp, r)
+	err := Query(&qp, r.URL.Query())
 	require.NoError(t, err)
 	require.Equal(t, 1, qp.Age)
 }
@@ -64,7 +64,7 @@ func TestParseShouldSetBools(t *testing.T) {
 
 	var qp QueryParams
 	r := httptest.NewRequest(http.MethodGet, "/?Happy=1", nil)
-	err := Parse(&qp, r)
+	err := Query(&qp, r.URL.Query())
 	require.NoError(t, err)
 	require.True(t, qp.Happy)
 }
@@ -76,7 +76,7 @@ func TestParseShouldSetFloats(t *testing.T) {
 
 	var qp QueryParams
 	r := httptest.NewRequest(http.MethodGet, "/?Num=1.1", nil)
-	err := Parse(&qp, r)
+	err := Query(&qp, r.URL.Query())
 	require.NoError(t, err)
 	require.Equal(t, 1.1, qp.Num)
 }
@@ -88,7 +88,7 @@ func TestParseShouldSetSliceInt(t *testing.T) {
 
 	var qp QueryParams
 	r := httptest.NewRequest(http.MethodGet, "/?Nums=1&Nums=2&Nums=3", nil)
-	err := Parse(&qp, r)
+	err := Query(&qp, r.URL.Query())
 	require.NoError(t, err)
 	require.Len(t, qp.Nums, 3)
 	assert.Contains(t, qp.Nums, 1)
@@ -103,10 +103,25 @@ func TestParseShouldSetSliceBool(t *testing.T) {
 
 	var qp QueryParams
 	r := httptest.NewRequest(http.MethodGet, "/?Nums=1&Nums=false", nil)
-	err := Parse(&qp, r)
+	err := Query(&qp, r.URL.Query())
 	require.NoError(t, err)
 	require.Len(t, qp.Nums, 2)
 
 	assert.Contains(t, qp.Nums, true)
 	assert.Contains(t, qp.Nums, false)
+}
+
+func TestParseShouldIgnoreDashTagValues(t *testing.T) {
+	type QueryParams struct {
+		Num int `query:"-"`
+	}
+
+	qp := &QueryParams{
+		Num: 100,
+	}
+
+	r := httptest.NewRequest(http.MethodGet, "/?Num=asdf", nil)
+	err := Query(qp, r.URL.Query())
+	require.NoError(t, err)
+	assert.Equal(t, qp.Num, 100)
 }

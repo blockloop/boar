@@ -28,8 +28,11 @@ func (h *HTTPError) Error() string {
 	return fmt.Sprintf("status: %d, error: %s", h.status, h.Err)
 }
 
-// ValidationError is an HTTPError that was caused by validation
-// this is useful when you want to control the flow of validation errors within your handlers.
+// ValidationError is an HTTPError that was caused by validation. Validation
+// errors are typically caused by valid tags or improper type mapping between
+// input types and struct fields. These should always be considered 400 errors.
+// This is useful when you want to control the flow of validation errors within
+// your handlers.
 //
 // Example:
 //    func Handle(c Context) error {

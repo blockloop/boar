@@ -1,11 +1,11 @@
-package query_test
+package bind_test
 
 import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
 
-	"github.com/blockloop/boar/query"
+	"github.com/blockloop/boar/bind"
 )
 
 func BenchmarkQueryParsingWithAllParams(b *testing.B) {
@@ -25,7 +25,7 @@ func BenchmarkQueryParsingWithAllParams(b *testing.B) {
 	r := httptest.NewRequest(http.MethodGet, "/"+qs, nil)
 
 	for i := 0; i < b.N; i++ {
-		err := query.Parse(&qp, r)
+		err := bind.Query(&qp, r.URL.Query())
 		if err != nil {
 			b.Fatal(err)
 		}
@@ -49,7 +49,7 @@ func BenchmarkQueryParsingWithAllParamsWithTags(b *testing.B) {
 	r := httptest.NewRequest(http.MethodGet, "/"+qs, nil)
 
 	for i := 0; i < b.N; i++ {
-		err := query.Parse(&qp, r)
+		err := bind.Query(&qp, r.URL.Query())
 		if err != nil {
 			b.Fatal(err)
 		}
@@ -69,7 +69,7 @@ func BenchmarkQueryParsingWithSimpleParams(b *testing.B) {
 	r := httptest.NewRequest(http.MethodGet, "/"+qs, nil)
 
 	for i := 0; i < b.N; i++ {
-		err := query.Parse(&qp, r)
+		err := bind.Query(&qp, r.URL.Query())
 		if err != nil {
 			b.Fatal(err)
 		}
@@ -89,7 +89,7 @@ func BenchmarkQueryParsingWithSimpleParamsWithTags(b *testing.B) {
 	r := httptest.NewRequest(http.MethodGet, "/"+qs, nil)
 
 	for i := 0; i < b.N; i++ {
-		err := query.Parse(&qp, r)
+		err := bind.Query(&qp, r.URL.Query())
 		if err != nil {
 			b.Fatal(err)
 		}
@@ -104,7 +104,7 @@ func BenchmarkQueryParsingWithOneSimpleParam(b *testing.B) {
 	r := httptest.NewRequest(http.MethodGet, "/?Name=brett", nil)
 
 	for i := 0; i < b.N; i++ {
-		err := query.Parse(&qp, r)
+		err := bind.Query(&qp, r.URL.Query())
 		if err != nil {
 			b.Fatal(err)
 		}
@@ -119,7 +119,7 @@ func BenchmarkQueryParsingWithOneSliceParam(b *testing.B) {
 	r := httptest.NewRequest(http.MethodGet, "/?Names=brett&Names=kristy&Names=jack&Names=jill", nil)
 
 	for i := 0; i < b.N; i++ {
-		err := query.Parse(&qp, r)
+		err := bind.Query(&qp, r.URL.Query())
 		if err != nil {
 			b.Fatal(err)
 		}
