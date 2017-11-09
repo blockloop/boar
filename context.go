@@ -41,6 +41,9 @@ type Context interface {
 	// Status returns the currently set status. This is useful for middlewares
 	Status() int
 
+	// WriteStatus sets the status and returns without a body
+	WriteStatus(status int) error
+
 	// URLParams returns all params as a key/value pair for quick lookups
 	URLParams() httprouter.Params
 
@@ -84,9 +87,10 @@ func (r *requestContext) URLParams() httprouter.Params {
 	return r.urlParams
 }
 
-func (r *requestContext) WriteHeader(status int) {
+func (r *requestContext) WriteStatus(status int) error {
 	r.status = status
 	r.response.WriteHeader(status)
+	return nil
 }
 
 func (r *requestContext) Status() int {
@@ -116,7 +120,8 @@ func (r *requestContext) ReadJSON(v interface{}) error {
 
 func (r *requestContext) WriteJSON(status int, v interface{}) error {
 	r.status = status
-	r.WriteHeader(status)
+	r.response.Header().Set("content-type", "application/json")
+	r.response.WriteHeader(status)
 	err := json.NewEncoder(r.Response()).Encode(v)
 	return errors.Wrap(err, "could not encode JSON response")
 }
