@@ -3,7 +3,6 @@ package boar
 import (
 	"net/http"
 
-	"github.com/apex/log"
 	"github.com/julienschmidt/httprouter"
 )
 
@@ -11,7 +10,11 @@ import (
 type Router struct {
 	r            *httprouter.Router
 	errorHandler ErrorHandler
-	log          log.Interface
+	mw           []Middleware
+}
+
+func nopHandler(Context) error {
+	return nil
 }
 
 // RealRouter returns the httprouter.Router used for actual serving
@@ -23,7 +26,7 @@ func (rtr *Router) RealRouter() *httprouter.Router {
 // this is particularly useful for filling contextual information into a struct
 // before passing it along to handle the request
 func (rtr *Router) Method(method string, path string, createHandler GetHandlerFunc) {
-	rtr.RealRouter().Handle(method, path, func(w http.ResponseWriter, r *http.Request, ps httprouter.Params) {
+	fn := func(w http.ResponseWriter, r *http.Request, ps httprouter.Params) {
 		c := newContext(r, w, ps)
 		h, err := createHandler(c)
 		if err != nil {
@@ -31,26 +34,40 @@ func (rtr *Router) Method(method string, path string, createHandler GetHandlerFu
 			return
 		}
 
-		if before, ok := h.(BeforeHandler); ok {
-			if err := before.Before(c); err != nil {
-				rtr.errorHandler(c, err)
-				return
-			}
-		}
-
-		if err := h.Handle(c); err != nil {
+		handle := rtr.withMiddlewares(h.Handle)
+		if err := handle(c); err != nil {
 			rtr.errorHandler(c, err)
 			return
 		}
+	}
 
-		if after, ok := h.(AfterHandler); ok {
-			if err := after.After(c); err != nil {
-				rtr.errorHandler(c, err)
-				return
-			}
-		}
-	})
+	rtr.RealRouter().Handle(method, path, fn)
 }
+
+func (rtr *Router) withMiddlewares(next HandlerFunc) HandlerFunc {
+	fn := next
+	for i := len(rtr.mw) - 1; i >= 0; i-- {
+		mw := rtr.mw[i]
+		fn = mw(fn)
+	}
+	return fn
+}
+
+// Use injects a middleware into the http requests. They are executed in the
+// order in which they are added.
+func (rtr *Router) Use(mw Middleware) {
+	rtr.mw = append(rtr.mw, mw)
+}
+
+// func (rtr *Router) UseClassic(cmw ClassicMiddleware) {
+// 	mw := func(next HandlerFunc) HandlerFunc {
+// 		return func(c Context) error {
+// 			cmw(func(r http.Request, w http.ResponseWriter) {
+// 			})
+// 		}
+// 	}
+// 	rtr.Use(mw)
+// }
 
 // Head is a handler that acceps HEAD requests
 func (rtr *Router) Head(path string, h GetHandlerFunc) {

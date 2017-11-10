@@ -14,6 +14,12 @@
   version = "v1.1.0"
 
 [[projects]]
+  name = "github.com/julienschmidt/httprouter"
+  packages = ["."]
+  revision = "8c199fb6259ffc1af525cc3ad52ee60ba8359669"
+  version = "v1.1"
+
+[[projects]]
   name = "github.com/pkg/errors"
   packages = ["."]
   revision = "645ef00459ed84a119197bfb8d8205042c6df63d"
@@ -34,6 +40,6 @@
 [solve-meta]
   analyzer-name = "dep"
   analyzer-version = 1
-  inputs-digest = "bceab68f727f4107b63e977d7f7bf62b09acfba8c2d2a42e11da22ff85f87821"
+  inputs-digest = "52a55a7e8dd42053848956e10d70d695a828cf7583de31d43fba3ad5fb7547fd"
   solver-name = "gps-cdcl"
   solver-version = 1
