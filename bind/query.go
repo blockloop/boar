@@ -14,7 +14,11 @@ const (
 
 // Query parses query parameters from the http.Request and injects them into v
 func Query(v interface{}, q url.Values) error {
-	obj := reflect.ValueOf(v).Elem()
+	return QueryValue(reflect.ValueOf(v).Elem(), q)
+}
+
+// QueryValue parses query parameters from the http.Request and injects them into v
+func QueryValue(obj reflect.Value, q url.Values) error {
 	kind := obj.Type()
 
 	for i := 0; i < obj.NumField(); i++ {

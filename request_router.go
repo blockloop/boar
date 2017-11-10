@@ -2,8 +2,16 @@ package boar
 
 import (
 	"net/http"
+	"reflect"
 
+	"github.com/blockloop/boar/bind"
 	"github.com/julienschmidt/httprouter"
+)
+
+var (
+	queryField     = "Query"
+	urlParamsField = "URLParams"
+	bodyField      = "Body"
 )
 
 // Router is an http router
@@ -29,6 +37,34 @@ func (rtr *Router) Method(method string, path string, createHandler GetHandlerFu
 	fn := func(w http.ResponseWriter, r *http.Request, ps httprouter.Params) {
 		c := newContext(r, w, ps)
 		h, err := createHandler(c)
+
+		handlerValue := reflect.Indirect(reflect.ValueOf(h))
+		qf := handlerValue.FieldByName(queryField)
+		if qf.IsValid() && qf.Kind() == reflect.Struct && qf.CanSet() {
+			if err := bind.QueryValue(qf, r.URL.Query()); err != nil {
+				rtr.errorHandler(c, err)
+				return
+			}
+		}
+
+		pf := handlerValue.FieldByName(urlParamsField)
+		if pf.IsValid() && pf.Kind() == reflect.Struct && pf.CanSet() {
+			if err := bind.ParamsValue(pf, ps); err != nil {
+				rtr.errorHandler(c, err)
+				return
+			}
+		}
+
+		if r.ContentLength > 0 {
+			bf := handlerValue.FieldByName(bodyField)
+			if bf.IsValid() && bf.Kind() == reflect.Struct && bf.CanSet() {
+				if err := c.ReadJSON(bf.Addr().Interface()); err != nil {
+					rtr.errorHandler(c, err)
+					return
+				}
+			}
+		}
+
 		if err != nil {
 			rtr.errorHandler(c, err)
 			return

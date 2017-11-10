@@ -13,7 +13,11 @@ const (
 
 // Params parses httprouter.Params and injects them into v.
 func Params(v interface{}, params httprouter.Params) error {
-	obj := reflect.ValueOf(v).Elem()
+	return ParamsValue(reflect.ValueOf(v).Elem(), params)
+}
+
+// ParamsValue parses httprouter.Params and injects them into v.
+func ParamsValue(obj reflect.Value, params httprouter.Params) error {
 	kind := obj.Type()
 
 	for i := 0; i < obj.NumField(); i++ {
