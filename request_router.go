@@ -1,11 +1,15 @@
 package boar
 
 import (
+	"fmt"
 	"net/http"
+	"net/url"
 	"reflect"
 
+	"github.com/asaskevich/govalidator"
 	"github.com/blockloop/boar/bind"
 	"github.com/julienschmidt/httprouter"
+	"github.com/pkg/errors"
 )
 
 var (
@@ -13,6 +17,9 @@ var (
 	urlParamsField = "URLParams"
 	bodyField      = "Body"
 )
+
+// JSON is a shortcut for map[string]interface{}
+type JSON map[string]interface{}
 
 // Router is an http router
 type Router struct {
@@ -30,6 +37,56 @@ func (rtr *Router) RealRouter() *httprouter.Router {
 	return rtr.r
 }
 
+func setQuery(handler reflect.Value, qs url.Values) error {
+	qf := handler.FieldByName(queryField)
+	if !qf.IsValid() {
+		return nil
+	}
+	if qf.Kind() != reflect.Struct {
+		return fmt.Errorf("%q field of %q must be a struct", queryField, handler.Type().Name())
+	}
+	if !qf.CanSet() {
+		return fmt.Errorf("%q field of %q is not setable", queryField, handler.Type().Name())
+	}
+	return bind.QueryValue(qf, qs)
+
+}
+
+func setURLParams(handler reflect.Value, params httprouter.Params) error {
+	pf := handler.FieldByName(urlParamsField)
+	if !pf.IsValid() {
+		return nil
+	}
+	if pf.Kind() != reflect.Struct {
+		return fmt.Errorf("%q field of %q must be a struct", queryField, handler.Type().Name())
+	}
+	if !pf.CanSet() {
+		return fmt.Errorf("%q field of %q is not setable", queryField, handler.Type().Name())
+	}
+	return bind.ParamsValue(pf, params)
+}
+
+func setBody(handler reflect.Value, c Context) error {
+	bf := handler.FieldByName(bodyField)
+	if bf.IsValid() {
+		return nil
+	}
+	if bf.Kind() != reflect.Struct {
+		return fmt.Errorf("%q field of %q must be a struct", bodyField, handler.Type().Name())
+	}
+	if !bf.CanSet() {
+		return fmt.Errorf("%q field of %q is not setable", bodyField, handler.Type().Name())
+	}
+	if err := c.ReadJSON(bf.Addr().Interface()); err != nil {
+		return err
+	}
+	ok, err := govalidator.ValidateStruct(bf.Addr().Interface())
+	if !ok {
+		return NewValidationError(err)
+	}
+	return nil
+}
+
 // Method is a path handler that uses a factory to generate the handler
 // this is particularly useful for filling contextual information into a struct
 // before passing it along to handle the request
@@ -37,37 +94,32 @@ func (rtr *Router) Method(method string, path string, createHandler GetHandlerFu
 	fn := func(w http.ResponseWriter, r *http.Request, ps httprouter.Params) {
 		c := newContext(r, w, ps)
 		h, err := createHandler(c)
-
-		handlerValue := reflect.Indirect(reflect.ValueOf(h))
-		qf := handlerValue.FieldByName(queryField)
-		if qf.IsValid() && qf.Kind() == reflect.Struct && qf.CanSet() {
-			if err := bind.QueryValue(qf, r.URL.Query()); err != nil {
-				rtr.errorHandler(c, err)
-				return
-			}
-		}
-
-		pf := handlerValue.FieldByName(urlParamsField)
-		if pf.IsValid() && pf.Kind() == reflect.Struct && pf.CanSet() {
-			if err := bind.ParamsValue(pf, ps); err != nil {
-				rtr.errorHandler(c, err)
-				return
-			}
-		}
-
-		if r.ContentLength > 0 {
-			bf := handlerValue.FieldByName(bodyField)
-			if bf.IsValid() && bf.Kind() == reflect.Struct && bf.CanSet() {
-				if err := c.ReadJSON(bf.Addr().Interface()); err != nil {
-					rtr.errorHandler(c, err)
-					return
-				}
-			}
-		}
-
 		if err != nil {
 			rtr.errorHandler(c, err)
 			return
+		}
+		if h == nil {
+			rtr.errorHandler(c, errors.New("handler cannot be nil"))
+			return
+		}
+
+		handlerValue := reflect.Indirect(reflect.ValueOf(h))
+
+		if err := setQuery(handlerValue, r.URL.Query()); err != nil {
+			rtr.errorHandler(c, err)
+			return
+		}
+
+		if err := setURLParams(handlerValue, ps); err != nil {
+			rtr.errorHandler(c, err)
+			return
+		}
+
+		if r.ContentLength > 0 {
+			if err := setBody(handlerValue, c); err != nil {
+				rtr.errorHandler(c, err)
+				return
+			}
 		}
 
 		handle := rtr.withMiddlewares(h.Handle)
