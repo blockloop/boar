@@ -37,7 +37,7 @@ ValidationError is an HTTPError that was caused by validation. It consists of no
 func main() {
     factory := handlers.NewFactory(db, appLogger)
     r := boar.NewRouter()
-    r.MethodFunc(http.MethodGet, "/person/:id", factory.ItemGetHandler)
+    r.Get("/person/:id", factory.ItemGetHandler)
     panic(r.ListenAndServe(":3000"))
 }
 
