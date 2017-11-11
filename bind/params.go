@@ -29,12 +29,11 @@ func ParamsValue(obj reflect.Value, params httprouter.Params) error {
 		tField := kind.Field(i)
 
 		kind := tField.Type.Kind()
+		// switch is benchmarked as about 5x faster than using a slice
 		switch kind {
-		case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64,
-			reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64,
-			reflect.Bool, reflect.Float32, reflect.Float64, reflect.String:
-			break
-		default:
+		case reflect.Complex64, reflect.Complex128, reflect.Array, reflect.Chan,
+			reflect.Func, reflect.Interface, reflect.Map, reflect.Ptr, reflect.Slice,
+			reflect.Struct, reflect.UnsafePointer:
 			return fmt.Errorf("%q is not a supported type for a url parameter", kind)
 		}
 

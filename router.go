@@ -1,9 +1,9 @@
 package boar
 
 import (
+	"log"
 	"net/http"
 
-	"github.com/apex/log"
 	"github.com/julienschmidt/httprouter"
 )
 
@@ -48,7 +48,7 @@ func defaultErrorHandler(c Context, err error) {
 	}
 
 	if err := c.WriteJSON(httperr.Status(), httperr); err != nil {
-		log.WithError(err).Error("could not serialize json")
+		log.Printf("ERROR: could not serialize json: %s", err)
 	}
 	return
 }
