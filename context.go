@@ -113,7 +113,7 @@ func (r *requestContext) ReadJSON(v interface{}) error {
 
 	ok, err := govalidator.ValidateStruct(v)
 	if !ok {
-		return NewValidationError(err)
+		return NewValidationError(BodyField, err)
 	}
 	return nil
 }
@@ -128,7 +128,7 @@ func (r *requestContext) WriteJSON(status int, v interface{}) error {
 
 func (r *requestContext) ReadQuery(v interface{}) error {
 	if err := bind.Query(v, r.Request().URL.Query()); err != nil {
-		return NewValidationError(err)
+		return NewValidationError(QueryField, err)
 	}
 	return nil
 }

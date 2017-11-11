@@ -4,6 +4,9 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"strings"
+
+	"github.com/pkg/errors"
 )
 
 var (
@@ -105,18 +108,59 @@ func (h *httpError) MarshalJSON() ([]byte, error) {
 //
 //
 type ValidationError struct {
-	httpError
+	location string
+	status   int
+	Errors   []error
 }
 
 var _ HTTPError = (*ValidationError)(nil)
 
-// Override Error so that status isn't printed back; only the text of the initial cause
-func (v *ValidationError) Error() string {
-	return v.Cause().Error()
+// NewValidationError creates a new Validation error with a single reason.
+// location is the area where the validation failed. It should be QueryField,
+// BodyField, or URLParamsField
+func NewValidationError(location string, err error) *ValidationError {
+	return NewValidationErrors(location, []error{err})
 }
 
-// NewValidationError creates a new ValidationError
-func NewValidationError(err error) *ValidationError {
-	cause := httpError{http.StatusBadRequest, err}
-	return &ValidationError{cause}
+// NewValidationErrors creates a new Validation error with reasons.
+// location is the area where the validation failed. It should be QueryField,
+// BodyField, or URLParamsField
+func NewValidationErrors(location string, errs []error) *ValidationError {
+	return &ValidationError{
+		location: location,
+		status:   http.StatusBadRequest,
+		Errors:   errs,
+	}
+}
+
+// Status is the http status to be used for responding to the client
+func (e *ValidationError) Status() int {
+	return e.status
+}
+
+// Cause is the underlying cause(s) of the validation error
+func (e *ValidationError) Cause() error {
+	return errors.New(e.Error())
+}
+
+func (e *ValidationError) Error() string {
+	s := make([]string, len(e.Errors))
+	for i, err := range e.Errors {
+		s[i] = err.Error()
+	}
+	return strings.Join(s, "; ")
+}
+
+// MarshalJSON allows overrides json.Marshal default behavior
+func (e *ValidationError) MarshalJSON() ([]byte, error) {
+	ers := make([]string, len(e.Errors))
+	for i, err := range e.Errors {
+		ers[i] = err.Error()
+	}
+
+	return json.Marshal(JSON{
+		"errors": JSON{
+			e.location: ers,
+		},
+	})
 }

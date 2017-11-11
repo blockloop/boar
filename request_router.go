@@ -12,10 +12,13 @@ import (
 	"github.com/pkg/errors"
 )
 
-var (
-	queryField     = "Query"
-	urlParamsField = "URLParams"
-	bodyField      = "Body"
+const (
+	// QueryField is the name of the field for query parameters
+	QueryField = "Query"
+	// URLParamsField is the name of the field for the URL parameters
+	URLParamsField = "URLParams"
+	// BodyField is the name of the field for the Body parameters
+	BodyField = "Body"
 )
 
 // JSON is a shortcut for map[string]interface{}
@@ -38,64 +41,76 @@ func (rtr *Router) RealRouter() *httprouter.Router {
 }
 
 func setQuery(handler reflect.Value, qs url.Values) error {
-	qf := handler.FieldByName(queryField)
+	qf := handler.FieldByName(QueryField)
 	if !qf.IsValid() {
 		return nil
 	}
 	if qf.Kind() != reflect.Struct {
-		return fmt.Errorf("%q field of %q must be a struct", queryField, handler.Type().Name())
+		return fmt.Errorf("%q field of %q must be a struct", QueryField, handler.Type().Name())
 	}
 	if !qf.CanSet() {
-		return fmt.Errorf("%q field of %q is not setable", queryField, handler.Type().Name())
+		return fmt.Errorf("%q field of %q is not setable", QueryField, handler.Type().Name())
 	}
 	if err := bind.QueryValue(qf, qs); err != nil {
 		return err
 	}
 	ok, err := govalidator.ValidateStruct(qf.Addr().Interface())
 	if !ok {
-		return NewValidationError(err)
+		verr, ok := err.(govalidator.Errors)
+		if !ok {
+			return verr
+		}
+		return NewValidationErrors(QueryField, verr.Errors())
 	}
 	return nil
 }
 
 func setURLParams(handler reflect.Value, params httprouter.Params) error {
-	pf := handler.FieldByName(urlParamsField)
+	pf := handler.FieldByName(URLParamsField)
 	if !pf.IsValid() {
 		return nil
 	}
 	if pf.Kind() != reflect.Struct {
-		return fmt.Errorf("%q field of %q must be a struct", queryField, handler.Type().Name())
+		return fmt.Errorf("%q field of %q must be a struct", QueryField, handler.Type().Name())
 	}
 	if !pf.CanSet() {
-		return fmt.Errorf("%q field of %q is not setable", queryField, handler.Type().Name())
+		return fmt.Errorf("%q field of %q is not setable", QueryField, handler.Type().Name())
 	}
 	if err := bind.ParamsValue(pf, params); err != nil {
 		return err
 	}
 	ok, err := govalidator.ValidateStruct(pf.Addr().Interface())
 	if !ok {
-		return NewValidationError(err)
+		verr, ok := err.(govalidator.Errors)
+		if !ok {
+			return verr
+		}
+		return NewValidationErrors(URLParamsField, verr.Errors())
 	}
 	return nil
 }
 
 func setBody(handler reflect.Value, c Context) error {
-	bf := handler.FieldByName(bodyField)
+	bf := handler.FieldByName(BodyField)
 	if !bf.IsValid() {
 		return nil
 	}
 	if bf.Kind() != reflect.Struct {
-		return fmt.Errorf("%q field of %q must be a struct", bodyField, handler.Type().Name())
+		return fmt.Errorf("%q field of %q must be a struct", BodyField, handler.Type().Name())
 	}
 	if !bf.CanSet() {
-		return fmt.Errorf("%q field of %q is not setable", bodyField, handler.Type().Name())
+		return fmt.Errorf("%q field of %q is not setable", BodyField, handler.Type().Name())
 	}
 	if err := c.ReadJSON(bf.Addr().Interface()); err != nil {
 		return err
 	}
 	ok, err := govalidator.ValidateStruct(bf.Addr().Interface())
 	if !ok {
-		return NewValidationError(err)
+		verr, ok := err.(govalidator.Errors)
+		if !ok {
+			return verr
+		}
+		return NewValidationErrors(BodyField, verr.Errors())
 	}
 	return nil
 }
