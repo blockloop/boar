@@ -6,8 +6,6 @@ jobs:
     working_directory: /go/src/github.com/blockloop/boar
     steps:
       - checkout
-      - run: go get -u gopkg.in/alecthomas/gometalinter.v1
-      - run: mv /go/bin/gometalinter.v1 /go/bin/gometalinter
-      - run: gometalinter --install
-      - run: gometalinter --enable-all --disable lll --disable dupl --vendor --errors
-      - run: go test -v ./...
+      - run: env
+      - run: go test -v -race ./...
+      - run: go build -v
