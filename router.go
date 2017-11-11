@@ -3,6 +3,7 @@ package boar
 import (
 	"log"
 	"net/http"
+	"runtime/debug"
 
 	"github.com/julienschmidt/httprouter"
 )
@@ -42,13 +43,17 @@ func NewRouter() *Router {
 }
 
 func defaultErrorHandler(c Context, err error) {
+	if err == nil {
+		return
+	}
+
 	httperr, ok := err.(HTTPError)
 	if !ok {
 		httperr = NewHTTPError(http.StatusInternalServerError, err)
 	}
 
 	if err := c.WriteJSON(httperr.Status(), httperr); err != nil {
-		log.Printf("ERROR: could not serialize json: %s", err)
+		log.Printf("ERROR: could not serialize json: %s\n%s", err, string(debug.Stack()))
 	}
 	return
 }
