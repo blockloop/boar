@@ -1,6 +1,7 @@
 package boar
 
 import (
+	"encoding/json"
 	"fmt"
 	"net/http"
 )
@@ -36,10 +37,17 @@ var (
 	ErrEntityNotFound = NewHTTPError(http.StatusNotFound, fmt.Errorf("entity not found"))
 )
 
-// HTTPError is an error that is responded back to the requestor
-type HTTPError struct {
+// HTTPError is an error that is communicated
+type HTTPError interface {
+	error
+	Cause() error
+	Status() int
+	json.Marshaler
+}
+
+type httpError struct {
 	status int
-	Err    error `json:"error"`
+	cause  error
 }
 
 // NewHTTPErrorStatus creates a new HTTP Error with the given status code and
@@ -50,25 +58,29 @@ func NewHTTPErrorStatus(status int) error {
 }
 
 // NewHTTPError creates a new HTTPError that will be marshaled to the requestor
-func NewHTTPError(status int, cause error) *HTTPError {
-	return &HTTPError{
+func NewHTTPError(status int, cause error) HTTPError {
+	return &httpError{
 		status: status,
-		Err:    cause,
+		cause:  cause,
 	}
 }
 
 // Status returns the status code to be used with this error
-func (h *HTTPError) Status() int {
+func (h *httpError) Status() int {
 	return h.status
 }
 
-func (h *HTTPError) Error() string {
-	return fmt.Sprintf("HTTPError: (status: %d, error: %s)", h.status, h.Err)
+func (h *httpError) Cause() error {
+	return h.cause
+}
+
+func (h *httpError) Error() string {
+	return fmt.Sprintf("HTTPError: (status: %d, error: %s)", h.status, h.cause)
 }
 
 // MarshalJSON marshals this error to JSON
-func (h *HTTPError) MarshalJSON() ([]byte, error) {
-	return []byte(fmt.Sprintf(`{"error": "%s"}`, h.Err.Error())), nil
+func (h *httpError) MarshalJSON() ([]byte, error) {
+	return []byte(fmt.Sprintf(`{"error": "%s"}`, h.cause.Error())), nil
 }
 
 // ValidationError is an HTTPError that was caused by validation. Validation
@@ -93,11 +105,18 @@ func (h *HTTPError) MarshalJSON() ([]byte, error) {
 //
 //
 type ValidationError struct {
-	HTTPError
+	httpError
+}
+
+var _ HTTPError = (*ValidationError)(nil)
+
+// Override Error so that status isn't printed back; only the text of the initial cause
+func (v *ValidationError) Error() string {
+	return v.Cause().Error()
 }
 
 // NewValidationError creates a new ValidationError
 func NewValidationError(err error) *ValidationError {
-	cause := NewHTTPError(http.StatusBadRequest, err)
-	return &ValidationError{*cause}
+	cause := httpError{http.StatusBadRequest, err}
+	return &ValidationError{cause}
 }

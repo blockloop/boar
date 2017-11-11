@@ -41,12 +41,9 @@ func NewRouter() *Router {
 }
 
 func defaultErrorHandler(c Context, err error) {
-	httperr, ok := err.(*HTTPError)
+	httperr, ok := err.(HTTPError)
 	if !ok {
-		httperr = &HTTPError{
-			status: http.StatusInternalServerError,
-			Err:    err,
-		}
+		httperr = NewHTTPError(http.StatusInternalServerError, err)
 	}
 
 	c.WriteJSON(httperr.Status(), httperr)

@@ -1,9 +1,6 @@
 # Boar
-Boar is a tiny HTTP framework (<1k LOC) that provides helpers to functionality commonly repeated in HTTP handlers: 
 
-1. Parsing a query string to a struct with static types and validation
-2. Parsing URL Path parameters to a struct with static types and validation
-3. Parsing JSON requests to a struct with static types and validation
+Boar is a small HTTP framework that aims to simplify and streamline the design of HTTP server applications. Boar automatically performs actions which are usually repeated across all handlers. Boar Automatically parses queryString, url parameters, and request body to a struct with static types and validation.
 
 Each HTTP handler returns an `error` for all paths except for happy path. If validation or parsing fail then the handler returns an error and a global handler writes the response back to the client. This keeps Handlers clean and straight forward and provides separation between validation, parsing, processing, response writing, and error handling. 
 

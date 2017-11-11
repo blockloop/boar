@@ -41,7 +41,7 @@ func TestReadJSONReturnsErrorIfJSONIsInvalid(t *testing.T) {
 	var req json.RawMessage
 	err := c.ReadJSON(&req)
 	assert.Error(t, err)
-	assert.IsType(t, &HTTPError{}, err)
+	assert.IsType(t, &httpError{}, err)
 }
 
 func TestReadJSONSetsBadRequestStatusIfJSONIsInvalid(t *testing.T) {
@@ -51,7 +51,7 @@ func TestReadJSONSetsBadRequestStatusIfJSONIsInvalid(t *testing.T) {
 	c := NewContext(r, nil, nil)
 
 	var req json.RawMessage
-	err := c.ReadJSON(&req).(*HTTPError)
+	err := c.ReadJSON(&req).(*httpError)
 	assert.Equal(t, http.StatusBadRequest, err.status)
 }
 

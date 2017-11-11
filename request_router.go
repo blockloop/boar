@@ -48,8 +48,14 @@ func setQuery(handler reflect.Value, qs url.Values) error {
 	if !qf.CanSet() {
 		return fmt.Errorf("%q field of %q is not setable", queryField, handler.Type().Name())
 	}
-	return bind.QueryValue(qf, qs)
-
+	if err := bind.QueryValue(qf, qs); err != nil {
+		return err
+	}
+	ok, err := govalidator.ValidateStruct(qf.Addr().Interface())
+	if !ok {
+		return NewValidationError(err)
+	}
+	return nil
 }
 
 func setURLParams(handler reflect.Value, params httprouter.Params) error {
@@ -63,12 +69,19 @@ func setURLParams(handler reflect.Value, params httprouter.Params) error {
 	if !pf.CanSet() {
 		return fmt.Errorf("%q field of %q is not setable", queryField, handler.Type().Name())
 	}
-	return bind.ParamsValue(pf, params)
+	if err := bind.ParamsValue(pf, params); err != nil {
+		return err
+	}
+	ok, err := govalidator.ValidateStruct(pf.Addr().Interface())
+	if !ok {
+		return NewValidationError(err)
+	}
+	return nil
 }
 
 func setBody(handler reflect.Value, c Context) error {
 	bf := handler.FieldByName(bodyField)
-	if bf.IsValid() {
+	if !bf.IsValid() {
 		return nil
 	}
 	if bf.Kind() != reflect.Struct {
@@ -132,6 +145,21 @@ func (rtr *Router) Method(method string, path string, createHandler GetHandlerFu
 	rtr.RealRouter().Handle(method, path, fn)
 }
 
+// MethodFunc sets a HandlerFunc for a url with the given method. It is used for
+// simple handlers that do not require any building. This is not a recommended
+// for common use cases
+func (rtr *Router) MethodFunc(method string, path string, h HandlerFunc) {
+	rtr.Method(method, path, func(Context) (Handler, error) {
+		return &simpleHandler{handle: h}, nil
+	})
+}
+
+// Use injects a middleware into the http requests. They are executed in the
+// order in which they are added.
+func (rtr *Router) Use(mw Middleware) {
+	rtr.mw = append(rtr.mw, mw)
+}
+
 func (rtr *Router) withMiddlewares(next HandlerFunc) HandlerFunc {
 	fn := next
 	for i := len(rtr.mw) - 1; i >= 0; i-- {
@@ -141,21 +169,13 @@ func (rtr *Router) withMiddlewares(next HandlerFunc) HandlerFunc {
 	return fn
 }
 
-// Use injects a middleware into the http requests. They are executed in the
-// order in which they are added.
-func (rtr *Router) Use(mw Middleware) {
-	rtr.mw = append(rtr.mw, mw)
+type simpleHandler struct {
+	handle HandlerFunc
 }
 
-// func (rtr *Router) UseClassic(cmw ClassicMiddleware) {
-// 	mw := func(next HandlerFunc) HandlerFunc {
-// 		return func(c Context) error {
-// 			cmw(func(r http.Request, w http.ResponseWriter) {
-// 			})
-// 		}
-// 	}
-// 	rtr.Use(mw)
-// }
+func (h *simpleHandler) Handle(c Context) error {
+	return h.handle(c)
+}
 
 // Head is a handler that acceps HEAD requests
 func (rtr *Router) Head(path string, h GetHandlerFunc) {
