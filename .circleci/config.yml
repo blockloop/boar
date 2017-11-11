@@ -6,9 +6,6 @@ jobs:
     working_directory: /go/src/github.com/blockloop/boar
     steps:
       - checkout
-      - run: sudo curl -SsL -o /usr/local/bin/dep https://github.com/golang/dep/releases/download/v0.3.2/dep-linux-amd64
-      - run: sudo chmod a+x /usr/local/bin/dep
-      - run: dep ensure
       - run: go get -u gopkg.in/alecthomas/gometalinter.v1
       - run: mv /go/bin/gometalinter.v1 /go/bin/gometalinter
       - run: gometalinter --install
