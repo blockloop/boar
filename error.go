@@ -110,28 +110,28 @@ func (h *httpError) MarshalJSON() ([]byte, error) {
 //
 //
 type ValidationError struct {
-	location string
-	status   int
-	Errors   []error
+	fieldName string
+	status    int
+	Errors    []error
 }
 
 var _ HTTPError = (*ValidationError)(nil)
 
 // NewValidationError creates a new Validation error with a single reason.
-// location is the area where the validation failed. It should be QueryField,
+// fieldName is the area where the validation failed. It should be QueryField,
 // BodyField, or URLParamsField
-func NewValidationError(location string, err error) *ValidationError {
-	return NewValidationErrors(location, []error{err})
+func NewValidationError(fieldName string, err error) *ValidationError {
+	return NewValidationErrors(fieldName, []error{err})
 }
 
 // NewValidationErrors creates a new Validation error with reasons.
-// location is the area where the validation failed. It should be QueryField,
+// fieldName is the area where the validation failed. It should be QueryField,
 // BodyField, or URLParamsField
-func NewValidationErrors(location string, errs []error) *ValidationError {
+func NewValidationErrors(fieldName string, errs []error) *ValidationError {
 	return &ValidationError{
-		location: location,
-		status:   http.StatusBadRequest,
-		Errors:   errs,
+		fieldName: fieldName,
+		status:    http.StatusBadRequest,
+		Errors:    errs,
 	}
 }
 
@@ -162,7 +162,7 @@ func (e *ValidationError) MarshalJSON() ([]byte, error) {
 
 	return json.Marshal(JSON{
 		"errors": JSON{
-			e.location: ers,
+			strings.ToLower(e.fieldName): ers,
 		},
 	})
 }

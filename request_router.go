@@ -40,55 +40,50 @@ func (rtr *Router) RealRouter() *httprouter.Router {
 	return rtr.r
 }
 
+func checkField(field reflect.Value, handlerName string) (bool, error) {
+	if !field.IsValid() {
+		return false, nil
+	}
+	if field.Kind() != reflect.Struct {
+		return false, fmt.Errorf("'%s' field of '%s' must be a struct", QueryField, handlerName)
+	}
+	if !field.CanSet() {
+		return false, fmt.Errorf("'%s' field of '%s' is not setable", QueryField, handlerName)
+	}
+	return true, nil
+}
+
 func setQuery(handler reflect.Value, qs url.Values) error {
-	qf := handler.FieldByName(QueryField)
-	if !qf.IsValid() {
-		return nil
+	field := handler.FieldByName(QueryField)
+	if settable, err := checkField(field, handler.Type().Name()); !settable {
+		return err
 	}
-	if qf.Kind() != reflect.Struct {
-		return fmt.Errorf("'%s' field of '%s' must be a struct", QueryField, handler.Type().Name())
-	}
-	if !qf.CanSet() {
-		return fmt.Errorf("'%s' field of '%s' is not setable", QueryField, handler.Type().Name())
-	}
-	if err := bind.QueryValue(qf, qs); err != nil {
+	if err := bind.QueryValue(field, qs); err != nil {
 		return NewValidationError(QueryField, err)
 	}
-	return validate(QueryField, qf.Addr().Interface())
+	return validate(QueryField, field.Addr().Interface())
 }
 
 func setURLParams(handler reflect.Value, params httprouter.Params) error {
-	pf := handler.FieldByName(URLParamsField)
-	if !pf.IsValid() {
-		return nil
+	field := handler.FieldByName(URLParamsField)
+	if settable, err := checkField(field, handler.Type().Name()); !settable {
+		return err
 	}
-	if pf.Kind() != reflect.Struct {
-		return fmt.Errorf("'%s' field of '%s' must be a struct", QueryField, handler.Type().Name())
-	}
-	if !pf.CanSet() {
-		return fmt.Errorf("'%s' field of '%s' is not setable", QueryField, handler.Type().Name())
-	}
-	if err := bind.ParamsValue(pf, params); err != nil {
+	if err := bind.ParamsValue(field, params); err != nil {
 		return NewValidationError(URLParamsField, err)
 	}
-	return validate(URLParamsField, pf.Addr().Interface())
+	return validate(URLParamsField, field.Addr().Interface())
 }
 
 func setBody(handler reflect.Value, c Context) error {
-	bf := handler.FieldByName(BodyField)
-	if !bf.IsValid() {
-		return nil
-	}
-	if bf.Kind() != reflect.Struct {
-		return fmt.Errorf("'%s' field of '%s' must be a struct", BodyField, handler.Type().Name())
-	}
-	if !bf.CanSet() {
-		return fmt.Errorf("'%s' field of '%s' is not setable", BodyField, handler.Type().Name())
-	}
-	if err := c.ReadJSON(bf.Addr().Interface()); err != nil {
+	field := handler.FieldByName(BodyField)
+	if settable, err := checkField(field, handler.Type().Name()); !settable {
 		return err
 	}
-	return validate(BodyField, bf.Addr().Interface())
+	if err := c.ReadJSON(field.Addr().Interface()); err != nil {
+		return err
+	}
+	return validate(BodyField, field.Addr().Interface())
 }
 
 func validate(fieldName string, v interface{}) error {

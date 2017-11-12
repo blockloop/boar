@@ -9,36 +9,40 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestSetQueryShouldDoNothingWhenQueryFieldDoesNotExist(t *testing.T) {
-	var handler struct{}
-	err := setQuery(reflect.ValueOf(handler), url.Values(nil))
+func TestCheckFieldShouldReturnNoErrorWhenFieldDoesNotExist(t *testing.T) {
+	_, err := checkField(reflect.Value{}, "")
 	assert.NoError(t, err)
 }
 
-func TestSetQueryShouldErrorWhenQueryFieldIsNotAStruct(t *testing.T) {
+func TestCheckFieldShouldReturnFalseWhenFieldDoesNotExist(t *testing.T) {
+	ok, _ := checkField(reflect.Value{}, "")
+	assert.False(t, ok)
+}
+
+func TestCheckFieldShouldErrorWhenFieldIsNotAStruct(t *testing.T) {
 	var handler struct {
 		Query int
 	}
-	err := setQuery(reflect.ValueOf(handler), url.Values(nil))
+	_, err := checkField(reflect.ValueOf(handler).FieldByName(QueryField), "")
 	assert.Error(t, err)
 }
 
-func TestSetQueryErrorWhenQueryFieldIsNotAStructShouldExplain(t *testing.T) {
+func TestCheckFieldErrorWhenFieldIsNotAStructShouldExplain(t *testing.T) {
 	var handler struct {
 		Query int
 	}
-	err := setQuery(reflect.ValueOf(handler), url.Values(nil))
+	_, err := checkField(reflect.ValueOf(handler).FieldByName(QueryField), "")
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "struct")
 }
 
-func TestSetQueryShouldErrorWhenQueryFieldIsNotSettable(t *testing.T) {
+func TestCheckFieldShouldErrorWhenFieldIsNotSettable(t *testing.T) {
 	var handler struct {
 		Query struct {
 			Age string
 		}
 	}
-	err := setQuery(reflect.ValueOf(handler), url.Values(nil))
+	_, err := checkField(reflect.ValueOf(handler).FieldByName("Query"), "")
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "setable")
 }
