@@ -55,7 +55,7 @@ func checkField(field reflect.Value, handlerName string) (bool, error) {
 
 func setQuery(handler reflect.Value, qs url.Values) error {
 	field := handler.FieldByName(QueryField)
-	if settable, err := checkField(field, handler.Type().Name()); !settable {
+	if ok, err := checkField(field, handler.Type().Name()); !ok {
 		return err
 	}
 	if err := bind.QueryValue(field, qs); err != nil {
@@ -66,7 +66,7 @@ func setQuery(handler reflect.Value, qs url.Values) error {
 
 func setURLParams(handler reflect.Value, params httprouter.Params) error {
 	field := handler.FieldByName(URLParamsField)
-	if settable, err := checkField(field, handler.Type().Name()); !settable {
+	if ok, err := checkField(field, handler.Type().Name()); !ok {
 		return err
 	}
 	if err := bind.ParamsValue(field, params); err != nil {
@@ -77,11 +77,11 @@ func setURLParams(handler reflect.Value, params httprouter.Params) error {
 
 func setBody(handler reflect.Value, c Context) error {
 	field := handler.FieldByName(BodyField)
-	if settable, err := checkField(field, handler.Type().Name()); !settable {
+	if ok, err := checkField(field, handler.Type().Name()); !ok {
 		return err
 	}
 	if err := c.ReadJSON(field.Addr().Interface()); err != nil {
-		return err
+		return NewValidationError(BodyField, err)
 	}
 	return validate(BodyField, field.Addr().Interface())
 }
@@ -104,7 +104,13 @@ func validate(fieldName string, v interface{}) error {
 // this is particularly useful for filling contextual information into a struct
 // before passing it along to handle the request
 func (rtr *Router) Method(method string, path string, createHandler GetHandlerFunc) {
-	fn := func(w http.ResponseWriter, r *http.Request, ps httprouter.Params) {
+	fn := rtr.makeHandler(method, path, createHandler)
+
+	rtr.RealRouter().Handle(method, path, fn)
+}
+
+func (rtr *Router) makeHandler(method string, path string, createHandler GetHandlerFunc) httprouter.Handle {
+	return func(w http.ResponseWriter, r *http.Request, ps httprouter.Params) {
 		c := newContext(r, w, ps)
 		h, err := createHandler(c)
 		if err != nil {
@@ -141,8 +147,6 @@ func (rtr *Router) Method(method string, path string, createHandler GetHandlerFu
 			return
 		}
 	}
-
-	rtr.RealRouter().Handle(method, path, fn)
 }
 
 // MethodFunc sets a HandlerFunc for a url with the given method. It is used for
