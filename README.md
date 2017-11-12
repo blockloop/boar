@@ -7,28 +7,6 @@ Boar is a small HTTP framework that aims to simplify and streamline the design o
 
 Each HTTP handler returns an `error` for all paths except for happy path. If validation or parsing fail then the handler returns an error and a global handler writes the response back to the client. This keeps Handlers clean and straight forward and provides separation between validation, parsing, processing, response writing, and error handling. 
 
-## Factory
-
-A factory is given contextual information and creates handlers. It solves several problems. Often HTTP handlers consist of constants and variable dependencies. Constant dependencies are things like configuration, databases, and http/gRPC clients. They remain the same throughout the lifecycle of the application. Variable dependencies are things that are built based on the request context. Variable dependencies consist of things like, request object (parsed as JSON, etc), query strings, loggers with context, authentication information, etc. A factory is responsible for filling out these pieces of information before the handler is activated. This is achieved by creating a Handler struct. 
-
-## Handlers
-
-A Handler is a struct that has  `func Handle(boar.Context) error`. When an HTTP request is received it is passed to the Factory to generate a handler. The Handler is then executed with the `boar.Context` for processing. Handlers are generally limited in scope. They are provided _all_ of the required components to process the request (i.e. user/auth information, datastores, loggers, etc)
-
-## Context
-
-`boar.Context` is provided for http handler or middleware. While it is a useful wrapper, it provides full control over the request and response objects with `c.Request() *http.Request` and `c.Response() http.ResponseWriter`. Along with WriteJSON and a few other small helpers the following are what I consider most useful
-
-1. `ReadQuery(interface{}) error`
-2. `ReadURLParams(interface{}) error`
-3. `ReadJSON(interface{}) error`
-
-Each of these funcs parse the query string, URL path parameters, and Body as JSON, respectively. Along with providing static type classing it provides validation provided by [asaskevich/govalidator](https://github.com/asaskevich/govalidator). It is a comprehensive validation engine for validating struct fields. It is not required by any means, but it is free if the tags are present. Each of these funcs return a `boar.HTTPError` if validation fails by either invalid types or govalidator failures. 
-
-## Paths and Routes
-
-All paths are routes are entirely handled by [julienschmidt/httprouter](https://github.com/julienschmidt/httprouter). Boar uses a small wrapper to create `boar.Context` and handle errors. 
-
 ## HTTPError
 
 HTTPError is a special error that is easily formatted and understood in an HTTP response. It consists of an HTTP status code and an underlying error. 
@@ -45,7 +23,7 @@ func main() {
     factory := handlers.NewFactory(db, appLogger)
     r := boar.NewRouter()
     r.Get("/person/:id", factory.GetPersonByID)
-    panic(r.ListenAndServe(":3000"))
+    log.WithError(r.ListenAndServe(":3000")).Fatal("application exit")
 }
 
 // handlers/factory.go
@@ -60,20 +38,13 @@ func NewFactory(db store.Store) Factory {
     }
 }
 func (f *Factory) GetPersonByID(c boar.Context) (Handler, error) {
-    h := &getUser{
+    return &getUser{
         db: f.db,
         log: f.log.WithFields(log.F{
             "request.id": f.RequestID(c),
             "user.id": f.UserID(c),
         }),
-    }
-    err := c.ParseURLParams(&h.URLParams)
-    if err != nil {
-        // err is a ValidationError and will be seralized as JSON and sent
-        // to the client as a 400 status code
-        return nil, err
-    }
-    return h, nil
+    }, nil
 }
 
 // handlers/get_user.go
@@ -92,16 +63,19 @@ func (h *getUser) Handle(c boar.Context) error {
         // logs request.id and user.id
         log.WithError(err).Error("error listing items from datastore")
         // return the error (as-is) to be handled by the global error handler
+        // which will write a 500 internal server error by default.
         return err
     }
 
     if user == nil {
-        // err will be seralized as JSON and sent to the client as a 404 with a body
-        // of { "error": "user not found" }
-        return boar.NewHTTPError(http.StatusNotFound, fmt.Errorf("user not found"))
+        // shortcut to a 404 error message with a message to signify that the route
+        // was okay, but the entity was not found
+        return boar.ErrEntityNotFound
     }
 
-    c.WriteJSON(http.StatusOK, &Response{
+    // if WriteJSON fails for some reason let the global error handler handle
+    // the logging
+    return c.WriteJSON(http.StatusOK, &Response{
         User: user,
     })
 }
