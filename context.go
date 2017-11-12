@@ -6,7 +6,6 @@ import (
 	"net/http"
 	"sync"
 
-	"github.com/asaskevich/govalidator"
 	"github.com/blockloop/boar/bind"
 	"github.com/julienschmidt/httprouter"
 	"github.com/pkg/errors"
@@ -109,11 +108,6 @@ func (r *requestContext) ReadJSON(v interface{}) error {
 	err := json.NewDecoder(r.Request().Body).Decode(v)
 	if err != nil {
 		return NewHTTPError(http.StatusBadRequest, err)
-	}
-
-	ok, err := govalidator.ValidateStruct(v)
-	if !ok {
-		return NewValidationError(BodyField, err)
 	}
 	return nil
 }

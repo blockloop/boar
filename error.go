@@ -83,7 +83,9 @@ func (h *httpError) Error() string {
 
 // MarshalJSON marshals this error to JSON
 func (h *httpError) MarshalJSON() ([]byte, error) {
-	return []byte(fmt.Sprintf(`{"error": "%s"}`, h.cause.Error())), nil
+	return json.Marshal(JSON{
+		"error": h.cause.Error(),
+	})
 }
 
 // ValidationError is an HTTPError that was caused by validation. Validation

@@ -60,7 +60,7 @@ func QueryValue(obj reflect.Value, q url.Values) error {
 		if val == "" {
 			continue
 		}
-		err := setSimpleField(field, tField.Name, kind, val)
+		err := setSimpleField(field, queryKey, kind, val)
 		if err != nil {
 			return err
 		}

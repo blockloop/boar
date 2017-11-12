@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestSetQueryShouldDoNothingWhenQueryFieldDoesNotExist(t *testing.T) {
@@ -64,7 +65,7 @@ func TestSetQueryShouldErrorWhenValidationError(t *testing.T) {
 	err := setQuery(reflect.Indirect(reflect.ValueOf(&handler)), url.Values{
 		"Name": []string{"1234"},
 	})
-	assert.Error(t, err)
+	require.Error(t, err)
 	assert.Contains(t, err.Error(), "Name")
 	assert.Contains(t, err.Error(), "1234")
 }

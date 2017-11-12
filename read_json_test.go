@@ -54,37 +54,3 @@ func TestReadJSONSetsBadRequestStatusIfJSONIsInvalid(t *testing.T) {
 	err := c.ReadJSON(&req).(*httpError)
 	assert.Equal(t, http.StatusBadRequest, err.status)
 }
-
-func TestReadJSONReturnsValidationErrorIfValidationFails(t *testing.T) {
-	body := bytes.NewBufferString(`{ "age": "brett" }`)
-	r := httptest.NewRequest(http.MethodGet, "/", body)
-
-	c := NewContext(r, nil, nil)
-
-	type myStruct struct {
-		Age string `json:"age" valid:"numeric"`
-	}
-
-	var req myStruct
-	err := c.ReadJSON(&req)
-	if !assert.IsType(t, &ValidationError{}, err) {
-		t.Error("err =>", err.Error())
-	}
-}
-
-func TestReadJSONSetsBadRequestStatusIfValidationFails(t *testing.T) {
-	body := bytes.NewBufferString(`{ "age": "brett" }`)
-	r := httptest.NewRequest(http.MethodGet, "/", body)
-	w := httptest.NewRecorder()
-
-	c := NewContext(r, w, nil)
-
-	type myStruct struct {
-		Age string `json:"age" valid:"numeric"`
-	}
-
-	var req myStruct
-	err := c.ReadJSON(&req).(*ValidationError)
-	assert.Contains(t, err.Error(), "age")
-	assert.Contains(t, err.Error(), "numeric")
-}

@@ -46,23 +46,15 @@ func setQuery(handler reflect.Value, qs url.Values) error {
 		return nil
 	}
 	if qf.Kind() != reflect.Struct {
-		return fmt.Errorf("%q field of %q must be a struct", QueryField, handler.Type().Name())
+		return fmt.Errorf("'%s' field of '%s' must be a struct", QueryField, handler.Type().Name())
 	}
 	if !qf.CanSet() {
-		return fmt.Errorf("%q field of %q is not setable", QueryField, handler.Type().Name())
+		return fmt.Errorf("'%s' field of '%s' is not setable", QueryField, handler.Type().Name())
 	}
 	if err := bind.QueryValue(qf, qs); err != nil {
-		return err
+		return NewValidationError(QueryField, err)
 	}
-	ok, err := govalidator.ValidateStruct(qf.Addr().Interface())
-	if !ok {
-		verr, ok := err.(govalidator.Errors)
-		if !ok {
-			return verr
-		}
-		return NewValidationErrors(QueryField, verr.Errors())
-	}
-	return nil
+	return validate(QueryField, qf.Addr().Interface())
 }
 
 func setURLParams(handler reflect.Value, params httprouter.Params) error {
@@ -71,23 +63,15 @@ func setURLParams(handler reflect.Value, params httprouter.Params) error {
 		return nil
 	}
 	if pf.Kind() != reflect.Struct {
-		return fmt.Errorf("%q field of %q must be a struct", QueryField, handler.Type().Name())
+		return fmt.Errorf("'%s' field of '%s' must be a struct", QueryField, handler.Type().Name())
 	}
 	if !pf.CanSet() {
-		return fmt.Errorf("%q field of %q is not setable", QueryField, handler.Type().Name())
+		return fmt.Errorf("'%s' field of '%s' is not setable", QueryField, handler.Type().Name())
 	}
 	if err := bind.ParamsValue(pf, params); err != nil {
-		return err
+		return NewValidationError(URLParamsField, err)
 	}
-	ok, err := govalidator.ValidateStruct(pf.Addr().Interface())
-	if !ok {
-		verr, ok := err.(govalidator.Errors)
-		if !ok {
-			return verr
-		}
-		return NewValidationErrors(URLParamsField, verr.Errors())
-	}
-	return nil
+	return validate(URLParamsField, pf.Addr().Interface())
 }
 
 func setBody(handler reflect.Value, c Context) error {
@@ -96,23 +80,29 @@ func setBody(handler reflect.Value, c Context) error {
 		return nil
 	}
 	if bf.Kind() != reflect.Struct {
-		return fmt.Errorf("%q field of %q must be a struct", BodyField, handler.Type().Name())
+		return fmt.Errorf("'%s' field of '%s' must be a struct", BodyField, handler.Type().Name())
 	}
 	if !bf.CanSet() {
-		return fmt.Errorf("%q field of %q is not setable", BodyField, handler.Type().Name())
+		return fmt.Errorf("'%s' field of '%s' is not setable", BodyField, handler.Type().Name())
 	}
 	if err := c.ReadJSON(bf.Addr().Interface()); err != nil {
 		return err
 	}
-	ok, err := govalidator.ValidateStruct(bf.Addr().Interface())
-	if !ok {
-		verr, ok := err.(govalidator.Errors)
-		if !ok {
-			return verr
-		}
-		return NewValidationErrors(BodyField, verr.Errors())
+	return validate(BodyField, bf.Addr().Interface())
+}
+
+func validate(fieldName string, v interface{}) error {
+	valid, err := govalidator.ValidateStruct(v)
+	if valid {
+		return nil
 	}
-	return nil
+	if verr, ok := err.(govalidator.Errors); ok {
+		return NewValidationErrors(fieldName, verr.Errors())
+	}
+	if verr, ok := err.(govalidator.Error); ok {
+		return NewValidationErrors(fieldName, []error{verr})
+	}
+	return err
 }
 
 // Method is a path handler that uses a factory to generate the handler
