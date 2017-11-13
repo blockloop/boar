@@ -1,5 +1,6 @@
 # Boar
 
+[![GoDoc](https://godoc.org/github.com/blockloop/boar?status.svg)](https://godoc.org/github.com/blockloop/boar)
 [![Build Status](https://travis-ci.org/blockloop/boar.svg?branch=master)](https://travis-ci.org/blockloop/boar)
 [![Coverage Status](https://coveralls.io/repos/github/blockloop/boar/badge.svg?branch=master&t=872674523461)](https://coveralls.io/github/blockloop/boar?branch=master)
 
