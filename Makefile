@@ -1,6 +1,6 @@
 
 test:
-	go test -coverprofile=.coverprofile .
+	go test -v ./...
 
 covertools: ${GOPATH}/bin/cover ${GOPATH}/bin/goveralls ${GOPATH}/bin/gover
 .PHONY: covertools

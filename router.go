@@ -4,8 +4,6 @@ import (
 	"log"
 	"net/http"
 	"runtime/debug"
-
-	"github.com/julienschmidt/httprouter"
 )
 
 // Middleware is a global middleware function
@@ -25,21 +23,6 @@ type ErrorHandler func(Context, error)
 // Handler is an http Handler
 type Handler interface {
 	Handle(Context) error
-}
-
-// NewRouterWithBase allows you to create a new http router with the provided
-//  httprouter.Router instead of the default httprouter.New()
-func NewRouterWithBase(r *httprouter.Router) *Router {
-	return &Router{
-		r:            r,
-		errorHandler: defaultErrorHandler,
-		mw:           make([]Middleware, 0),
-	}
-}
-
-// NewRouter creates a new router for handling http requests
-func NewRouter() *Router {
-	return NewRouterWithBase(httprouter.New())
 }
 
 func defaultErrorHandler(c Context, err error) {

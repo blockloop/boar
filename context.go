@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"net/http"
-	"sync"
 
 	"github.com/blockloop/boar/bind"
 	"github.com/julienschmidt/httprouter"
@@ -34,13 +33,10 @@ type Context interface {
 	// ReadForm(v interface{}) error
 	ReadJSON(v interface{}) error
 
-	// WriteJSON sets the status code and then sends a json response message
+	// WriteJSON writes the status code and then sends a json response message
 	WriteJSON(status int, v interface{}) error
 
-	// Status returns the currently set status. This is useful for middlewares
-	Status() int
-
-	// WriteStatus sets the status and returns without a body
+	// WriteStatus is an alias to c.Response().WriteHeader(status)
 	WriteStatus(status int) error
 
 	// URLParams returns all params as a key/value pair for quick lookups
@@ -58,20 +54,16 @@ func NewContext(r *http.Request, w http.ResponseWriter, ps httprouter.Params) Co
 
 func newContext(r *http.Request, w http.ResponseWriter, ps httprouter.Params) *requestContext {
 	return &requestContext{
-		response:   w,
-		request:    r,
-		onceStatus: &sync.Once{},
-		status:     http.StatusOK,
-		urlParams:  ps,
+		response:  w,
+		request:   r,
+		urlParams: ps,
 	}
 }
 
 type requestContext struct {
-	response   http.ResponseWriter
-	request    *http.Request
-	status     int
-	onceStatus *sync.Once
-	urlParams  httprouter.Params
+	response  http.ResponseWriter
+	request   *http.Request
+	urlParams httprouter.Params
 }
 
 func (r *requestContext) Context() context.Context {
@@ -87,13 +79,8 @@ func (r *requestContext) URLParams() httprouter.Params {
 }
 
 func (r *requestContext) WriteStatus(status int) error {
-	r.status = status
 	r.response.WriteHeader(status)
 	return nil
-}
-
-func (r *requestContext) Status() int {
-	return r.status
 }
 
 func (r *requestContext) Request() *http.Request {
@@ -113,7 +100,6 @@ func (r *requestContext) ReadJSON(v interface{}) error {
 }
 
 func (r *requestContext) WriteJSON(status int, v interface{}) error {
-	r.status = status
 	r.response.Header().Set("content-type", "application/json")
 	r.response.WriteHeader(status)
 	err := json.NewEncoder(r.Response()).Encode(v)

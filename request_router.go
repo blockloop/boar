@@ -24,6 +24,21 @@ const (
 // JSON is a shortcut for map[string]interface{}
 type JSON map[string]interface{}
 
+// NewRouterWithBase allows you to create a new http router with the provided
+//  httprouter.Router instead of the default httprouter.New()
+func NewRouterWithBase(r *httprouter.Router) *Router {
+	return &Router{
+		r:            r,
+		errorHandler: defaultErrorHandler,
+		mw:           make([]Middleware, 0),
+	}
+}
+
+// NewRouter creates a new router for handling http requests
+func NewRouter() *Router {
+	return NewRouterWithBase(httprouter.New())
+}
+
 // Router is an http router
 type Router struct {
 	r            *httprouter.Router
@@ -38,66 +53,6 @@ func nopHandler(Context) error {
 // RealRouter returns the httprouter.Router used for actual serving
 func (rtr *Router) RealRouter() *httprouter.Router {
 	return rtr.r
-}
-
-func checkField(field reflect.Value, handlerName string) (bool, error) {
-	if !field.IsValid() {
-		return false, nil
-	}
-	if field.Kind() != reflect.Struct {
-		return false, fmt.Errorf("'%s' field of '%s' must be a struct", QueryField, handlerName)
-	}
-	if !field.CanSet() {
-		return false, fmt.Errorf("'%s' field of '%s' is not setable", QueryField, handlerName)
-	}
-	return true, nil
-}
-
-func setQuery(handler reflect.Value, qs url.Values) error {
-	field := handler.FieldByName(QueryField)
-	if ok, err := checkField(field, handler.Type().Name()); !ok {
-		return err
-	}
-	if err := bind.QueryValue(field, qs); err != nil {
-		return NewValidationError(QueryField, err)
-	}
-	return validate(QueryField, field.Addr().Interface())
-}
-
-func setURLParams(handler reflect.Value, params httprouter.Params) error {
-	field := handler.FieldByName(URLParamsField)
-	if ok, err := checkField(field, handler.Type().Name()); !ok {
-		return err
-	}
-	if err := bind.ParamsValue(field, params); err != nil {
-		return NewValidationError(URLParamsField, err)
-	}
-	return validate(URLParamsField, field.Addr().Interface())
-}
-
-func setBody(handler reflect.Value, c Context) error {
-	field := handler.FieldByName(BodyField)
-	if ok, err := checkField(field, handler.Type().Name()); !ok {
-		return err
-	}
-	if err := c.ReadJSON(field.Addr().Interface()); err != nil {
-		return NewValidationError(BodyField, err)
-	}
-	return validate(BodyField, field.Addr().Interface())
-}
-
-func validate(fieldName string, v interface{}) error {
-	valid, err := govalidator.ValidateStruct(v)
-	if valid {
-		return nil
-	}
-	if verr, ok := err.(govalidator.Errors); ok {
-		return NewValidationErrors(fieldName, verr.Errors())
-	}
-	if verr, ok := err.(govalidator.Error); ok {
-		return NewValidationErrors(fieldName, []error{verr})
-	}
-	return err
 }
 
 // Method is a path handler that uses a factory to generate the handler
@@ -173,14 +128,6 @@ func (rtr *Router) withMiddlewares(next HandlerFunc) HandlerFunc {
 	return fn
 }
 
-type simpleHandler struct {
-	handle HandlerFunc
-}
-
-func (h *simpleHandler) Handle(c Context) error {
-	return h.handle(c)
-}
-
 // Head is a handler that acceps HEAD requests
 func (rtr *Router) Head(path string, h GetHandlerFunc) {
 	rtr.Method(http.MethodHead, path, h)
@@ -237,4 +184,72 @@ func (rtr *Router) ListenAndServe(addr string) error {
 // an error will get routed to this error handler
 func (rtr *Router) SetErrorHandler(h ErrorHandler) {
 	rtr.errorHandler = h
+}
+
+func checkField(field reflect.Value, handlerName string) (bool, error) {
+	if !field.IsValid() {
+		return false, nil
+	}
+	if field.Kind() != reflect.Struct {
+		return false, fmt.Errorf("'%s' field of '%s' must be a struct", QueryField, handlerName)
+	}
+	if !field.CanSet() {
+		return false, fmt.Errorf("'%s' field of '%s' is not setable", QueryField, handlerName)
+	}
+	return true, nil
+}
+
+func setQuery(handler reflect.Value, qs url.Values) error {
+	field := handler.FieldByName(QueryField)
+	if ok, err := checkField(field, handler.Type().Name()); !ok {
+		return err
+	}
+	if err := bind.QueryValue(field, qs); err != nil {
+		return NewValidationError(QueryField, err)
+	}
+	return validate(QueryField, field.Addr().Interface())
+}
+
+func setURLParams(handler reflect.Value, params httprouter.Params) error {
+	field := handler.FieldByName(URLParamsField)
+	if ok, err := checkField(field, handler.Type().Name()); !ok {
+		return err
+	}
+	if err := bind.ParamsValue(field, params); err != nil {
+		return NewValidationError(URLParamsField, err)
+	}
+	return validate(URLParamsField, field.Addr().Interface())
+}
+
+func setBody(handler reflect.Value, c Context) error {
+	field := handler.FieldByName(BodyField)
+	if ok, err := checkField(field, handler.Type().Name()); !ok {
+		return err
+	}
+	if err := c.ReadJSON(field.Addr().Interface()); err != nil {
+		return NewValidationError(BodyField, err)
+	}
+	return validate(BodyField, field.Addr().Interface())
+}
+
+func validate(fieldName string, v interface{}) error {
+	valid, err := govalidator.ValidateStruct(v)
+	if valid {
+		return nil
+	}
+	if verr, ok := err.(govalidator.Errors); ok {
+		return NewValidationErrors(fieldName, verr.Errors())
+	}
+	if verr, ok := err.(govalidator.Error); ok {
+		return NewValidationErrors(fieldName, []error{verr})
+	}
+	return err
+}
+
+type simpleHandler struct {
+	handle HandlerFunc
+}
+
+func (h *simpleHandler) Handle(c Context) error {
+	return h.handle(c)
 }
