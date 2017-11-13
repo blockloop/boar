@@ -117,15 +117,15 @@ type ValidationError struct {
 var _ HTTPError = (*ValidationError)(nil)
 
 // NewValidationError creates a new Validation error with a single reason.
-// fieldName is the area where the validation failed. It should be QueryField,
-// BodyField, or URLParamsField
+// fieldName is the area where the validation failed
+// bodyField, or urlParamsField
 func NewValidationError(fieldName string, err error) *ValidationError {
 	return NewValidationErrors(fieldName, []error{err})
 }
 
 // NewValidationErrors creates a new Validation error with reasons.
-// fieldName is the area where the validation failed. It should be QueryField,
-// BodyField, or URLParamsField
+// fieldName is the area where the validation failed
+// bodyField, or urlParamsField
 func NewValidationErrors(fieldName string, errs []error) *ValidationError {
 	return &ValidationError{
 		fieldName: fieldName,
