@@ -1,3 +1,4 @@
+// package boar provides HTTP middleware for semantic and organized HTTP server applications
 package boar
 
 import (

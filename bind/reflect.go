@@ -1,3 +1,5 @@
+// package bind provides reflection shortcuts for binding key/value pairs and strings
+// to static types
 package bind
 
 import (
