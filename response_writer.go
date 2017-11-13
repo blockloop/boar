@@ -10,6 +10,8 @@ import (
 // written for retrieval after the response has been sent
 type ResponseWriter interface {
 	http.ResponseWriter
+	io.Closer
+
 	Status() int
 	Body() []byte
 	Len() int
@@ -34,6 +36,23 @@ func NewBufferedResponseWriter(base http.ResponseWriter) *BufferedResponseWriter
 	}
 }
 
+// Flush flushes the buffer into the write stream and sends the body to the client
+// Once flush has been called, there can be no more headers or anything sent to the client
+//
+// Flush is called internally by the Router once all middlewares, handlers, and error handlers
+// have completely executed. This allows the middlewares access to writing headers, reading
+// contents, etc.
+func (w *BufferedResponseWriter) Flush() error {
+	w.base.WriteHeader(w.Status())
+	_, err := io.Copy(w.base, w.body)
+	return err
+}
+
+// Close flushes the response stream and closes the buffer
+func (w *BufferedResponseWriter) Close() error {
+	return w.Flush()
+}
+
 // Status returns the currently set HTTP status code
 func (w *BufferedResponseWriter) Status() int {
 	return w.status
@@ -49,7 +68,12 @@ func (w *BufferedResponseWriter) Len() int {
 	return w.body.Len()
 }
 
-// Header returns the headers
+// Header returns the header map that will be sent by WriteHeader. The Header map
+// also is the mechanism with which Handlers can set HTTP trailers.
+//
+// Unlike the default http.ResponseWriter, headers can be written *after* the response
+// body has been written because the response body is buffered and therefore not written
+// to the stream until Flush or Close is called
 func (w *BufferedResponseWriter) Header() http.Header {
 	return w.base.Header()
 }
@@ -61,14 +85,12 @@ func (w *BufferedResponseWriter) Write(b []byte) (n int, err error) {
 	if w.status == 0 {
 		w.status = http.StatusOK
 	}
-	return io.MultiWriter(w.body, w.base).Write(b)
+	return w.body.Write(b)
 }
 
-// WriteHeader sends an HTTP response header with status code. If WriteHeader is
-// not called explicitly, the first call to Write will trigger an implicit
-// WriteHeader(http.StatusOK). Thus explicit calls to WriteHeader are mainly used
-// to send error codes.
+// WriteHeader sets the http status code. Unlike the default http.ResponseWriter, this does
+// _not_ begin the response transaction. This will simply store the status code until Flush
+// is executed
 func (w *BufferedResponseWriter) WriteHeader(status int) {
 	w.status = status
-	w.base.WriteHeader(status)
 }
