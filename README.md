@@ -1,7 +1,7 @@
 # Boar
 
 [![Build Status](https://travis-ci.org/blockloop/boar.svg?branch=master)](https://travis-ci.org/blockloop/boar)
-[![Coverage Status](https://coveralls.io/repos/github/blockloop/boar/badge.svg?branch=master)](https://coveralls.io/github/blockloop/boar?branch=master)
+[![Coverage Status](https://coveralls.io/repos/github/blockloop/boar/badge.svg?branch=master&t=872674523461)](https://coveralls.io/github/blockloop/boar?branch=master)
 
 Boar is a small HTTP framework that aims to simplify and streamline the design of HTTP server applications. Boar automatically performs actions which are usually repeated across all handlers. Boar Automatically parses queryString, url parameters, and request body to a struct with static types and validation.
 
