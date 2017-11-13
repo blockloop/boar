@@ -4,17 +4,44 @@
 [![Build Status](https://travis-ci.org/blockloop/boar.svg?branch=master)](https://travis-ci.org/blockloop/boar)
 [![Coverage Status](https://coveralls.io/repos/github/blockloop/boar/badge.svg?branch=master&t=872674523461)](https://coveralls.io/github/blockloop/boar?branch=master)
 
-Boar is a small HTTP framework that aims to simplify and streamline the design of HTTP server applications. Boar automatically performs actions which are usually repeated across all handlers. Boar Automatically parses queryString, url parameters, and request body to a struct with static types and validation.
+
+Boar aims to streamline the design of HTTP server applications by providing separation of concerns usually crammed into HTTP handler functions or chained middlewares. Some of the most common actions are performed automatically before the HTTP handler is even executed.
+
+## Handlers
+
+With Boar, handlers are not functions. A Handler in Boar is an interface that has `Handle(Context) error`. This provides the ability to build request context around the handler _before_ the handler is executed. An HTTP handler looks something like this:
+
+```go
+type createPersonHandler struct {
+    db store.Persons
+    log log.Interface
+
+    Body struct {
+        Name string `query:"name"`
+        Age  int    `query:"age"`
+    }
+}
+
+func (h *listTagsHandler) Handle(boar.Context) error {
+    // h.log.Info("received request")
+    // id, err := h.db.Create(h.Body.Name, h.Body.Age)
+}
+```
+
+The Query field within the handler will be automaticaly populated with the contents of the query string (if they exist). Not only does this provide an obvious structure to the query string, it provides static type parsing by default. Rather than littering your handler func with `r.URL.Query().Get("page")`, `strconv.ParseInt()`, and writing bad request errors, the framework handles these operations automatically. If the client sends `?page=aaa` then parsing will fail and the framework will automatically respond to the client with an error explaining that `page` must be an integer. listTagsHandler.Handle() is never executed.
+
+Validation is also provided. See [Validation](#Validation) for more details.
+
+## Body parsing
+
+
+
+## Error Handling
 
 Each HTTP handler returns an `error` for all paths except for happy path. If validation or parsing fail then the handler returns an error and a global handler writes the response back to the client. This keeps Handlers clean and straight forward and provides separation between validation, parsing, processing, response writing, and error handling. 
 
-## HTTPError
-
-HTTPError is a special error that is easily formatted and understood in an HTTP response. It consists of an HTTP status code and an underlying error. 
-
-## ValidationError
-
-ValidationError is an HTTPError that was caused by validation. It consists of nothing more than an embedded HTTPError with a status code of 400 - Bad Request. It is useful for differentiating between validation errors and internal errors (client or server caused)
+- HTTPError - interface. A special error that is easily formatted and understood in an HTTP response. It consists of an HTTP status code and an underlying error. 
+- ValidationError - an HTTPError that was caused by validation. It is an HTTPError with a status code of 400 - Bad Request. It is useful for differentiating between validation errors and internal errors (client or server caused)
 
 ## Example
 ```go

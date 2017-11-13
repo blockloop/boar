@@ -8,20 +8,19 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/blockloop/boar/mocks"
 	"github.com/stretchr/testify/assert"
 	. "github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 )
 
 func TestDefaultErrorHandlerShouldDoNothingToForNilError(t *testing.T) {
-	mc := &mocks.Context{}
+	mc := &MockContext{}
 	defaultErrorHandler(mc, nil)
 	mc.AssertNotCalled(t, "WriteJSON")
 }
 
 func TestDefaultErrorHandlerShouldWriteExistingHTTPError(t *testing.T) {
-	mc := &mocks.Context{}
+	mc := &MockContext{}
 	status := 400
 	err := NewHTTPErrorStatus(status)
 	mc.On("WriteJSON", Anything, Anything).Return(nil).Run(func(args Arguments) {
@@ -33,7 +32,7 @@ func TestDefaultErrorHandlerShouldWriteExistingHTTPError(t *testing.T) {
 }
 
 func TestDefaultErrorHandlerShouldLogErrIfWriteJSONFails(t *testing.T) {
-	mc := &mocks.Context{}
+	mc := &MockContext{}
 	status := 400
 	err := NewHTTPErrorStatus(status)
 	writeErr := errors.New("something went wrong")
@@ -50,7 +49,7 @@ func TestDefaultErrorHandlerShouldLogErrIfWriteJSONFails(t *testing.T) {
 }
 
 func TestDefaultErrorHandlerShouldMakeNonHTTPErrorsIntoHTTPErrors(t *testing.T) {
-	mc := &mocks.Context{}
+	mc := &MockContext{}
 	err := errors.New("something went wrong")
 	mc.On("WriteJSON", Anything, Anything).Return(nil).Run(func(args Arguments) {
 		herr := args.Get(1)

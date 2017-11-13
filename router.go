@@ -41,6 +41,10 @@ func defaultErrorHandler(c Context, err error) {
 	if !ok {
 		httperr = NewHTTPError(http.StatusInternalServerError, err)
 	}
+	if httperr.Status() > 499 {
+		// log internal server errors
+		log.Printf("ERROR: %+v", httperr)
+	}
 
 	if werr := c.WriteJSON(httperr.Status(), httperr); werr != nil {
 		log.Printf("ERROR: could not serialize json: %s\n%s", werr, string(debug.Stack()))

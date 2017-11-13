@@ -6,7 +6,6 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/blockloop/boar/mocks"
 	"github.com/stretchr/testify/assert"
 	. "github.com/stretchr/testify/mock"
 )
@@ -20,7 +19,7 @@ func TestWriteJSONSetsContentType(t *testing.T) {
 }
 
 func TestWriteJSONReturnsErrorWhenJSONEncodeFails(t *testing.T) {
-	w := &mocks.ResponseWriter{}
+	w := &MockResponseWriter{}
 	expected := io.ErrClosedPipe
 	w.On("Write", Anything).Return(0, expected)
 	w.On("Header", Anything).Return(http.Header{})
@@ -32,7 +31,7 @@ func TestWriteJSONReturnsErrorWhenJSONEncodeFails(t *testing.T) {
 }
 
 func TestWriteJSONDoesNotReturnErrorWhenJSONEncodePasses(t *testing.T) {
-	w := &mocks.ResponseWriter{}
+	w := &MockResponseWriter{}
 	w.On("Write", Anything).Return(0, nil)
 	w.On("Header", Anything).Return(http.Header{})
 	w.On("WriteHeader", Anything).Return(0)
