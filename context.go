@@ -3,11 +3,11 @@ package boar
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
 
 	"github.com/blockloop/boar/bind"
 	"github.com/julienschmidt/httprouter"
-	"github.com/pkg/errors"
 )
 
 // Context is an http handler context
@@ -103,12 +103,12 @@ func (r *requestContext) WriteJSON(status int, v interface{}) error {
 	r.response.Header().Set("content-type", "application/json")
 	r.response.WriteHeader(status)
 	err := json.NewEncoder(r.Response()).Encode(v)
-	return errors.Wrap(err, "could not encode JSON response")
+	return fmt.Errorf("could not encode JSON response: %+v", err)
 }
 
 func (r *requestContext) ReadQuery(v interface{}) error {
 	if err := bind.Query(v, r.Request().URL.Query()); err != nil {
-		return NewValidationError(QueryField, err)
+		return NewValidationError(queryField, err)
 	}
 	return nil
 }

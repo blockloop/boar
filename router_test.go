@@ -2,12 +2,13 @@ package boar
 
 import (
 	"bytes"
+	"errors"
 	"io/ioutil"
 	"log"
+	"net/http/httptest"
 	"testing"
 
 	"github.com/blockloop/boar/mocks"
-	"github.com/pkg/errors"
 	"github.com/stretchr/testify/assert"
 	. "github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
@@ -59,4 +60,43 @@ func TestDefaultErrorHandlerShouldMakeNonHTTPErrorsIntoHTTPErrors(t *testing.T) 
 	})
 
 	defaultErrorHandler(mc, err)
+}
+
+func MakeHandlerShouldCallErrorHandlerWhenNilHandler(t *testing.T) {
+	var called bool
+
+	r := NewRouter()
+	r.SetErrorHandler(func(c Context, err error) {
+		called = true
+	})
+
+	hndlr := r.makeHandler("GET", "/", func(Context) (Handler, error) {
+		return nil, nil
+	})
+
+	req := httptest.NewRequest("GET", "/", nil)
+	w := httptest.NewRecorder()
+	hndlr(w, req, nil)
+	assert.True(t, called)
+}
+
+func MakeHandlerShouldCallErrorHandlerWhenErrorOnCreateHandler(t *testing.T) {
+	var called bool
+
+	r := NewRouter()
+	hErr := errors.New("")
+
+	r.SetErrorHandler(func(c Context, err error) {
+		called = true
+		assert.Equal(t, hErr, err)
+	})
+
+	hndlr := r.makeHandler("GET", "/", func(Context) (Handler, error) {
+		return nil, hErr
+	})
+
+	req := httptest.NewRequest("GET", "/", nil)
+	w := httptest.NewRecorder()
+	hndlr(w, req, nil)
+	assert.True(t, called)
 }
