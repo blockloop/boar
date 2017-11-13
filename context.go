@@ -103,8 +103,10 @@ func (r *requestContext) ReadJSON(v interface{}) error {
 func (r *requestContext) WriteJSON(status int, v interface{}) error {
 	r.response.Header().Set("content-type", "application/json")
 	r.response.WriteHeader(status)
-	err := json.NewEncoder(r.Response()).Encode(v)
-	return fmt.Errorf("could not encode JSON response: %+v", err)
+	if err := json.NewEncoder(r.Response()).Encode(v); err != nil {
+		return fmt.Errorf("could not encode JSON response: %+v", err)
+	}
+	return nil
 }
 
 func (r *requestContext) ReadQuery(v interface{}) error {
