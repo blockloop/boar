@@ -62,7 +62,7 @@ func TestDefaultErrorHandlerShouldMakeNonHTTPErrorsIntoHTTPErrors(t *testing.T) 
 	defaultErrorHandler(mc, err)
 }
 
-func MakeHandlerShouldCallErrorHandlerWhenNilHandler(t *testing.T) {
+func TestMakeHandlerShouldCallErrorHandlerWhenNilHandler(t *testing.T) {
 	var called bool
 
 	r := NewRouter()
@@ -80,7 +80,7 @@ func MakeHandlerShouldCallErrorHandlerWhenNilHandler(t *testing.T) {
 	assert.True(t, called)
 }
 
-func MakeHandlerShouldCallErrorHandlerWhenErrorOnCreateHandler(t *testing.T) {
+func TestMakeHandlerShouldCallErrorHandlerWhenErrorOnCreateHandler(t *testing.T) {
 	var called bool
 
 	r := NewRouter()
