@@ -100,3 +100,57 @@ func TestMakeHandlerShouldCallErrorHandlerWhenErrorOnCreateHandler(t *testing.T)
 	hndlr(w, req, nil)
 	assert.True(t, called)
 }
+
+type badQueryHandler struct {
+	Query int
+}
+
+func (h *badQueryHandler) Handle(Context) error { return nil }
+
+func TestMakeHandlerShouldCallErrorHandlerWhenSetQueryFails(t *testing.T) {
+	var called bool
+
+	r := NewRouter()
+
+	r.SetErrorHandler(func(c Context, err error) {
+		called = true
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "Query")
+	})
+
+	hndlr := r.makeHandler("GET", "/", func(Context) (Handler, error) {
+		return &badQueryHandler{}, nil
+	})
+
+	req := httptest.NewRequest("GET", "/", nil)
+	w := httptest.NewRecorder()
+	hndlr(w, req, nil)
+	assert.True(t, called)
+}
+
+type badURLParamsHandler struct {
+	URLParams int
+}
+
+func (h *badURLParamsHandler) Handle(Context) error { return nil }
+
+func TestMakeHandlerShouldCallErrorHandlerWhenSetURLParamsFaill(t *testing.T) {
+	var called bool
+
+	r := NewRouter()
+
+	r.SetErrorHandler(func(c Context, err error) {
+		called = true
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "URL")
+	})
+
+	hndlr := r.makeHandler("GET", "/", func(Context) (Handler, error) {
+		return &badURLParamsHandler{}, nil
+	})
+
+	req := httptest.NewRequest("GET", "/", nil)
+	w := httptest.NewRecorder()
+	hndlr(w, req, nil)
+	assert.True(t, called)
+}
