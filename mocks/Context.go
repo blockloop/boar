@@ -101,20 +101,6 @@ func (_m *Context) Response() http.ResponseWriter {
 	return r0
 }
 
-// Status provides a mock function with given fields:
-func (_m *Context) Status() int {
-	ret := _m.Called()
-
-	var r0 int
-	if rf, ok := ret.Get(0).(func() int); ok {
-		r0 = rf()
-	} else {
-		r0 = ret.Get(0).(int)
-	}
-
-	return r0
-}
-
 // URLParams provides a mock function with given fields:
 func (_m *Context) URLParams() httprouter.Params {
 	ret := _m.Called()
