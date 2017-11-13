@@ -1,10 +1,12 @@
 package boar
 
 import (
+	"bufio"
 	"bytes"
 	"errors"
 	"io/ioutil"
 	"log"
+	"net/http"
 	"net/http/httptest"
 	"testing"
 
@@ -133,7 +135,7 @@ type badURLParamsHandler struct {
 
 func (h *badURLParamsHandler) Handle(Context) error { return nil }
 
-func TestMakeHandlerShouldCallErrorHandlerWhenSetURLParamsFaill(t *testing.T) {
+func TestMakeHandlerShouldCallErrorHandlerWhenSetURLParamsFails(t *testing.T) {
 	var called bool
 
 	r := NewRouter()
@@ -152,4 +154,108 @@ func TestMakeHandlerShouldCallErrorHandlerWhenSetURLParamsFaill(t *testing.T) {
 	w := httptest.NewRecorder()
 	hndlr(w, req, nil)
 	assert.True(t, called)
+}
+
+type bodyHandler struct {
+	handle HandlerFunc
+	Body   struct {
+		Age int
+	}
+}
+
+func (h *bodyHandler) Handle(c Context) error { return h.handle(c) }
+
+func TestMakeHandlerShouldNotSetBodyWhenContentLengthIsEmpty(t *testing.T) {
+	var called bool
+
+	r := NewRouter()
+
+	handler := &bodyHandler{}
+	handler.handle = func(Context) error {
+		called = true
+		return nil
+	}
+
+	hndlr := r.makeHandler("POST", "/", func(Context) (Handler, error) {
+		return handler, nil
+	})
+
+	// the only way to set content-length is to use a raw request
+	rawReq := `POST /post HTTP/1.1
+Connection: close
+Accept: */*
+Content-Type: application/json
+Content-Length: 0
+
+{ "Age": 1 }`
+	req, err := http.ReadRequest(bufio.NewReader(bytes.NewBufferString(rawReq)))
+	require.NoError(t, err)
+	assert.Equal(t, "0", req.Header.Get("content-length"))
+
+	w := httptest.NewRecorder()
+	hndlr(w, req, nil)
+
+	require.True(t, called)
+	// even though Age was in the body, the request was not pared because no content-length
+	// this is not a real-world scenario because the content-length is set by frameworks
+	// and therefore will _always_ be set when there is a body. However, this allows
+	// me to test the code which only triggers on ContentLength
+	assert.NotEqual(t, 1, handler.Body.Age)
+}
+
+func TestMakeHandlerShouldSetBodyWhenContentLengthIsNotZero(t *testing.T) {
+	r := NewRouter()
+
+	handler := &bodyHandler{}
+	handler.handle = func(Context) error {
+		return nil
+	}
+
+	hndlr := r.makeHandler("POST", "/", func(Context) (Handler, error) {
+		return handler, nil
+	})
+
+	req, err := http.NewRequest("POST", "/", bytes.NewBufferString(`{ "Age": 1 }`))
+	require.NoError(t, err)
+
+	w := httptest.NewRecorder()
+	hndlr(w, req, nil)
+
+	assert.Equal(t, 1, handler.Body.Age)
+}
+
+type nopHandler struct{}
+
+func (*nopHandler) Handle(Context) error {
+	return nil
+}
+
+func TestShouldExecuteMiddlewaresInExactOrder(t *testing.T) {
+	items := make([]string, 0)
+
+	r := NewRouter()
+
+	r.Use(func(next HandlerFunc) HandlerFunc {
+		return func(c Context) error {
+			items = append(items, "a")
+			return next(c)
+		}
+	})
+	r.Use(func(next HandlerFunc) HandlerFunc {
+		return func(c Context) error {
+			items = append(items, "b")
+			return next(c)
+		}
+	})
+
+	hndlr := r.makeHandler("GET", "/", func(Context) (Handler, error) {
+		return &nopHandler{}, nil
+	})
+
+	req := httptest.NewRequest("GET", "/", nil)
+	w := httptest.NewRecorder()
+	hndlr(w, req, nil)
+	assert.Len(t, items, 2)
+	assert.Equal(t, items[0], "a")
+	assert.Equal(t, items[1], "b")
 }

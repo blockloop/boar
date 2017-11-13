@@ -1,6 +1,7 @@
 package boar
 
 import (
+	"errors"
 	"fmt"
 	"net/url"
 	"reflect"
@@ -16,23 +17,36 @@ const (
 	bodyField      = "Body"
 )
 
-func checkField(field reflect.Value, handlerName string) (bool, error) {
+var (
+	errNotAStruct  = errors.New("not a struct")
+	errNotSettable = errors.New("not settable")
+)
+
+func checkField(field reflect.Value) (bool, error) {
 	if !field.IsValid() {
 		return false, nil
 	}
 	if field.Kind() != reflect.Struct {
-		return false, fmt.Errorf("'%s' field of '%s' must be a struct", queryField, handlerName)
+		return false, errNotAStruct
 	}
 	if !field.CanSet() {
-		return false, fmt.Errorf("'%s' field of '%s' is not setable", queryField, handlerName)
+		return false, errNotSettable
 	}
 	return true, nil
 }
 
 func setQuery(handler reflect.Value, qs url.Values) error {
 	field := handler.FieldByName(queryField)
-	if ok, err := checkField(field, handler.Type().Name()); !ok {
-		return err
+	ok, err := checkField(field)
+	if !ok {
+		if err == nil {
+			return nil
+		}
+		return &badFieldError{
+			field:   queryField,
+			handler: handler,
+			err:     err,
+		}
 	}
 	if err := bind.QueryValue(field, qs); err != nil {
 		return NewValidationError(queryField, err)
@@ -42,8 +56,16 @@ func setQuery(handler reflect.Value, qs url.Values) error {
 
 func setURLParams(handler reflect.Value, params httprouter.Params) error {
 	field := handler.FieldByName(urlParamsField)
-	if ok, err := checkField(field, handler.Type().Name()); !ok {
-		return err
+	ok, err := checkField(field)
+	if !ok {
+		if err == nil {
+			return nil
+		}
+		return &badFieldError{
+			field:   urlParamsField,
+			handler: handler,
+			err:     err,
+		}
 	}
 	if err := bind.ParamsValue(field, params); err != nil {
 		return NewValidationError(urlParamsField, err)
@@ -53,8 +75,16 @@ func setURLParams(handler reflect.Value, params httprouter.Params) error {
 
 func setBody(handler reflect.Value, c Context) error {
 	field := handler.FieldByName(bodyField)
-	if ok, err := checkField(field, handler.Type().Name()); !ok {
-		return err
+	ok, err := checkField(field)
+	if !ok {
+		if err == nil {
+			return nil
+		}
+		return &badFieldError{
+			field:   bodyField,
+			handler: handler,
+			err:     err,
+		}
 	}
 	if err := c.ReadJSON(field.Addr().Interface()); err != nil {
 		return NewValidationError(bodyField, err)
@@ -74,4 +104,14 @@ func validate(fieldName string, v interface{}) error {
 		return NewValidationErrors(fieldName, []error{verr})
 	}
 	return err
+}
+
+type badFieldError struct {
+	field   string
+	handler reflect.Value
+	err     error
+}
+
+func (b badFieldError) Error() string {
+	return fmt.Sprintf("%s field of %s is %s", b.field, b.handler.Type().Name(), b.err)
 }

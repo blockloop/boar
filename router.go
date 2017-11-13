@@ -140,12 +140,12 @@ func (rtr *Router) MethodFunc(method string, path string, h HandlerFunc) {
 // Use injects a middleware into the http requests. They are executed in the
 // order in which they are added.
 func (rtr *Router) Use(mw Middleware) {
-	rtr.mw = append(rtr.mw, mw)
+	rtr.mw = append([]Middleware{mw}, rtr.mw...)
 }
 
 func (rtr *Router) withMiddlewares(next HandlerFunc) HandlerFunc {
 	fn := next
-	for i := len(rtr.mw) - 1; i >= 0; i-- {
+	for i := 0; i < len(rtr.mw); i++ {
 		mw := rtr.mw[i]
 		fn = mw(fn)
 	}

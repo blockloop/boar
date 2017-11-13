@@ -14,3 +14,9 @@ ${GOPATH}/bin/gover:
 	
 cover: covertools
 	@go list -f '{{if len .TestGoFiles}}"go test -coverprofile={{.Dir}}/.coverprofile {{.ImportPath}}"{{end}}' ./... | grep -v vendor/ | xargs -L 1 sh -c
+
+mocks:
+	-@rm mock_*.go 2> /dev/null
+	@mockery -case=underscore -all -recursive=false -inpkg
+	@rename -f 's|.go|_test.go|g' mock_*
+	-@dep prune
