@@ -103,6 +103,28 @@ func(next HandlerFunc) HandlerFunc {
     └── location.go        // you should implement an interface for every database
 ```
 
+
+## Reflection is terrible. Why would you do this?
+
+Actually, reflection is not inherently bad. Overuse of reflection where not necessary has performance impacts but how do you think encoding/json works? JSON doesn't magically make it's way into struct fields. It uses reflection. Also, the body simply _uses_ `(encoding/json).Decode(...)`. The only extra step is checking if your request handler has a Body field which is negligible. Don't believe me? Checkout the benchmark test files I've added to this repository. I test boar's http handler vs the builtin http handler. Obviously, boar will be slower, because it is doing some extra work, but the difference is - again - negligible. 
+
+Here is the output of the benchmarks I ran in [](router_bench_test.go):
+
+```
+→ go test -bench=. -benchtime=10s ./                                                                                                                                                                                                                                                                                                                                  146
+goos: darwin
+goarch: amd64
+pkg: github.com/blockloop/boar
+BenchmarkBoarHandlerWithBody-8                           3000000              5307 ns/op
+BenchmarkHTTPHandlerBaseWithBody-8                       3000000              4850 ns/op
+BenchmarkBoarHandlerWithBodyAndQuery-8                   2000000              6907 ns/op
+BenchmarkHTTPHandlerBaseWithBodyAndQueryString-8         2000000              5610 ns/op
+PASS
+ok      github.com/blockloop/boar       78.903s
+```
+
+Both of these tests run govalidator, even though there are no validation tags which means there is execution time for reflecting over the request, but it is minimal.  The difference between parsing your own body and using boar is 457 _nano seconds_. Not bad. The difference between using boar and parsing your own query string is 13 _micro seconds_. Is that enough to make a difference in 95% of applications? I very much doubt it, but you can judge for yourself based on your application needs. Boar tries to stay as fast as possible while greatly decreasing the amount of monotonous code you have to write parsing, validating, verifying, etc.
+
 ## Example Project
 
 ```go
