@@ -18,7 +18,7 @@ Other thanks to
 
 ## Handlers
 
-With Boar, handlers are not functions. A Handler in Boar is an interface that has `Handle(Context) error`. This provides the ability to build request context around the handler _before_ the handler is executed. An HTTP handler looks something like this:
+With Boar, handlers are not functions. A Handler is an interface with `Handle(Context) error`. This provides the ability to build request context around the handler _before_ the handler is executed. An HTTP handler looks something like this:
 
 ```go
 type createPersonHandler struct {

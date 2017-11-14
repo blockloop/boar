@@ -19,9 +19,9 @@ type Middleware func(HandlerFunc) HandlerFunc
 // HandlerFunc is a function that handles an HTTP request
 type HandlerFunc func(Context) error
 
-// GetHandlerFunc is a prerequesite function that is used to generate handlers
+// HandlerProviderFunc is a prerequesite function that is used to generate handlers
 // this is valuable to use like a factory
-type GetHandlerFunc func(Context) (Handler, error)
+type HandlerProviderFunc func(Context) (Handler, error)
 
 // ErrorHandler is a handler func that is called when an error is returned from
 // a route
@@ -82,13 +82,13 @@ func (rtr *Router) RealRouter() *httprouter.Router {
 // Method is a path handler that uses a factory to generate the handler
 // this is particularly useful for filling contextual information into a struct
 // before passing it along to handle the request
-func (rtr *Router) Method(method string, path string, createHandler GetHandlerFunc) {
+func (rtr *Router) Method(method string, path string, createHandler HandlerProviderFunc) {
 	fn := rtr.makeHandler(method, path, createHandler)
 
 	rtr.RealRouter().Handle(method, path, fn)
 }
 
-func (rtr *Router) makeHandler(method string, path string, createHandler GetHandlerFunc) httprouter.Handle {
+func (rtr *Router) makeHandler(method string, path string, createHandler HandlerProviderFunc) httprouter.Handle {
 	return func(w http.ResponseWriter, r *http.Request, ps httprouter.Params) {
 		c := newContext(r, w, ps)
 		h, err := createHandler(c)
@@ -153,49 +153,49 @@ func (rtr *Router) withMiddlewares(next HandlerFunc) HandlerFunc {
 }
 
 // Head is a handler that acceps HEAD requests
-func (rtr *Router) Head(path string, h GetHandlerFunc) {
+func (rtr *Router) Head(path string, h HandlerProviderFunc) {
 	rtr.Method(http.MethodHead, path, h)
 }
 
 // Trace is a handler that accepts only TRACE requests
-func (rtr *Router) Trace(path string, h GetHandlerFunc) {
+func (rtr *Router) Trace(path string, h HandlerProviderFunc) {
 	rtr.Method(http.MethodTrace, path, h)
 }
 
 // Delete is a handler that accepts only DELETE requests
-func (rtr *Router) Delete(path string, h GetHandlerFunc) {
+func (rtr *Router) Delete(path string, h HandlerProviderFunc) {
 	rtr.Method(http.MethodDelete, path, h)
 }
 
 // Options is a handler that accepts only OPTIONS requests
 // It is not recommended to use this as the router automatically
 // handles OPTIONS requests by default
-func (rtr *Router) Options(path string, h GetHandlerFunc) {
+func (rtr *Router) Options(path string, h HandlerProviderFunc) {
 	rtr.Method(http.MethodOptions, path, h)
 }
 
 // Get is a handler that accepts only GET requests
-func (rtr *Router) Get(path string, h GetHandlerFunc) {
+func (rtr *Router) Get(path string, h HandlerProviderFunc) {
 	rtr.Method(http.MethodGet, path, h)
 }
 
 // Put is a handler that accepts only PUT requests
-func (rtr *Router) Put(path string, h GetHandlerFunc) {
+func (rtr *Router) Put(path string, h HandlerProviderFunc) {
 	rtr.Method(http.MethodPut, path, h)
 }
 
 // Post is a handler that accepts only POST requests
-func (rtr *Router) Post(path string, h GetHandlerFunc) {
+func (rtr *Router) Post(path string, h HandlerProviderFunc) {
 	rtr.Method(http.MethodPost, path, h)
 }
 
 // Patch is a handler that accepts only PATCH requests
-func (rtr *Router) Patch(path string, h GetHandlerFunc) {
+func (rtr *Router) Patch(path string, h HandlerProviderFunc) {
 	rtr.Method(http.MethodPatch, path, h)
 }
 
 // Connect is a handler that accepts only CONNECT requests
-func (rtr *Router) Connect(path string, h GetHandlerFunc) {
+func (rtr *Router) Connect(path string, h HandlerProviderFunc) {
 	rtr.Method(http.MethodConnect, path, h)
 }
 
