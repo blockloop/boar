@@ -97,5 +97,5 @@ type TypeMismatchError struct {
 }
 
 func (e TypeMismatchError) Error() string {
-	return fmt.Sprintf("'%s' is not a valid %s for %s", e.val, e.kind, e.fieldName)
+	return fmt.Sprintf("%s' is not a valid %s for %s: %s", e.val, e.kind, e.fieldName, e.cause)
 }
