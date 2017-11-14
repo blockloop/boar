@@ -2,6 +2,7 @@ package boar
 
 import (
 	"errors"
+	"fmt"
 	"log"
 	"net/http"
 	"reflect"
@@ -139,8 +140,17 @@ func (rtr *Router) MethodFunc(method string, path string, h HandlerFunc) {
 
 // Use injects a middleware into the http requests. They are executed in the
 // order in which they are added.
-func (rtr *Router) Use(mw Middleware) {
-	rtr.mw = append([]Middleware{mw}, rtr.mw...)
+func (rtr *Router) Use(mw ...Middleware) {
+	if len(mw) == 0 {
+		return
+	}
+
+	for i, m := range mw {
+		if m == nil {
+			panic(fmt.Sprintf("cannot use nil middleware at %d: ", i))
+		}
+	}
+	rtr.mw = append(mw, rtr.mw...)
 }
 
 func (rtr *Router) withMiddlewares(next HandlerFunc) HandlerFunc {

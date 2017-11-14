@@ -259,3 +259,16 @@ func TestShouldExecuteMiddlewaresInExactOrder(t *testing.T) {
 	assert.Equal(t, items[0], "a")
 	assert.Equal(t, items[1], "b")
 }
+
+func TestUseShouldPanicIfNilMiddleware(t *testing.T) {
+	r := NewRouter()
+	assert.Panics(t, func() {
+		r.Use(nil)
+	})
+}
+
+func TestUseShouldNotAddEmptyMiddlewares(t *testing.T) {
+	r := NewRouter()
+	r.Use(make([]Middleware, 0)...)
+	assert.Len(t, r.mw, 0)
+}
