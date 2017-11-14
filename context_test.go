@@ -8,6 +8,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	. "github.com/stretchr/testify/mock"
+	"github.com/stretchr/testify/require"
 )
 
 func TestWriteJSONSetsContentType(t *testing.T) {
@@ -27,7 +28,8 @@ func TestWriteJSONReturnsErrorWhenJSONEncodeFails(t *testing.T) {
 
 	c := NewContext(nil, w, nil)
 	err := c.WriteJSON(http.StatusTeapot, JSON{})
-	assert.Error(t, err)
+	require.Error(t, err, "WriteJSON")
+	assert.Contains(t, err.Error(), expected.Error())
 }
 
 func TestWriteJSONDoesNotReturnErrorWhenJSONEncodePasses(t *testing.T) {

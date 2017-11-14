@@ -35,13 +35,14 @@ func TestReadJSONParsesJSONBody(t *testing.T) {
 func TestReadJSONReturnsErrorIfJSONIsInvalid(t *testing.T) {
 	body := bytes.NewBufferString(`}`)
 	r := httptest.NewRequest(http.MethodGet, "/", body)
+	r.Header.Set("content-type", "application/json")
 
 	c := NewContext(r, nil, nil)
 
 	var req json.RawMessage
 	err := c.ReadJSON(&req)
 	assert.Error(t, err)
-	assert.IsType(t, &httpError{}, err)
+	assert.IsType(t, &ValidationError{}, err)
 }
 
 func TestReadJSONSetsBadRequestStatusIfJSONIsInvalid(t *testing.T) {
@@ -51,6 +52,6 @@ func TestReadJSONSetsBadRequestStatusIfJSONIsInvalid(t *testing.T) {
 	c := NewContext(r, nil, nil)
 
 	var req json.RawMessage
-	err := c.ReadJSON(&req).(*httpError)
-	assert.Equal(t, http.StatusBadRequest, err.status)
+	err := c.ReadJSON(&req).(HTTPError)
+	assert.Equal(t, http.StatusBadRequest, err.Status())
 }

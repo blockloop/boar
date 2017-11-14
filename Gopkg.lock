@@ -14,6 +14,12 @@
   version = "v1.1.0"
 
 [[projects]]
+  branch = "master"
+  name = "github.com/gorilla/schema"
+  packages = ["."]
+  revision = "e6c82218a8b3ed3cbeb5407429849c0b0b597d40"
+
+[[projects]]
   name = "github.com/julienschmidt/httprouter"
   packages = ["."]
   revision = "8c199fb6259ffc1af525cc3ad52ee60ba8359669"
@@ -40,6 +46,6 @@
 [solve-meta]
   analyzer-name = "dep"
   analyzer-version = 1
-  inputs-digest = "5f64c4ed101b79ae9070d29240f7a7a5d13e27ae541e75b83650a195ce22c686"
+  inputs-digest = "d87a62eeef417023fd341083118dccc47e3c1d362dcb68b4f545b0ffa3c9c425"
   solver-name = "gps-cdcl"
   solver-version = 1

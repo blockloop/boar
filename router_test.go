@@ -217,6 +217,7 @@ func TestMakeHandlerShouldSetBodyWhenContentLengthIsNotZero(t *testing.T) {
 
 	req, err := http.NewRequest("POST", "/", bytes.NewBufferString(`{ "Age": 1 }`))
 	require.NoError(t, err)
+	req.Header.Set("content-type", contentTypeJSON)
 
 	w := httptest.NewRecorder()
 	hndlr(w, req, nil)

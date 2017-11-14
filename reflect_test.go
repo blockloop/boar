@@ -1,8 +1,12 @@
 package boar
 
 import (
+	"bufio"
+	"bytes"
 	"encoding/json"
 	"errors"
+	"net/http"
+	"net/http/httptest"
 	"net/url"
 	"reflect"
 	"testing"
@@ -150,11 +154,14 @@ func TestSetBodyShouldReturnValidationErrorWhenReadJSONFails(t *testing.T) {
 	expErr := errors.New("something went wrong")
 	mc := &MockContext{}
 	mc.On("ReadJSON", Anything).Return(expErr)
+	req := httptest.NewRequest("GET", "/", bytes.NewBufferString("{}"))
+	req.Header.Set("content-type", contentTypeJSON)
+	mc.On("Request", Anything).Return(req)
 
 	err := setBody(reflect.Indirect(reflect.ValueOf(&handler)), mc)
-
-	require.Error(t, err)
-	assert.IsType(t, &ValidationError{}, err)
+	if !assert.IsType(t, &ValidationError{}, err) {
+		t.Error(err)
+	}
 }
 
 func TestSetBodyShouldReturnValidationErrorWhenValidationFails(t *testing.T) {
@@ -165,6 +172,11 @@ func TestSetBodyShouldReturnValidationErrorWhenValidationFails(t *testing.T) {
 	}
 
 	mc := &MockContext{}
+
+	req := httptest.NewRequest("GET", "/", bytes.NewBufferString("{}"))
+	req.Header.Set("content-type", contentTypeJSON)
+	mc.On("Request", Anything).Return(req)
+
 	mc.On("ReadJSON", Anything).Run(func(args Arguments) {
 		json.Unmarshal([]byte(`{"Name": "1234"}`), args.Get(0))
 	}).Return(nil)
@@ -172,4 +184,99 @@ func TestSetBodyShouldReturnValidationErrorWhenValidationFails(t *testing.T) {
 	err := setBody(reflect.Indirect(reflect.ValueOf(&handler)), mc)
 	require.Error(t, err)
 	assert.IsType(t, &ValidationError{}, err)
+}
+
+func TestSetBodyShouldReturnErrorWhenUnknownContentType(t *testing.T) {
+	var handler struct {
+		Body struct {
+			Name string
+		}
+	}
+
+	request := httptest.NewRequest("POST", "/", bytes.NewBufferString(`<xml></xml>`))
+	request.Header.Set("content-type", "application/xml")
+	mc := &MockContext{}
+	mc.On("Request").Return(request)
+
+	err := setBody(reflect.Indirect(reflect.ValueOf(&handler)), mc)
+	require.Error(t, err)
+}
+
+func TestSetBodyUnknownContentTypeErrorShouldExplain(t *testing.T) {
+	var handler struct {
+		Body struct {
+			Name string
+		}
+	}
+
+	request := httptest.NewRequest("POST", "/", bytes.NewBufferString(`<xml></xml>`))
+	request.Header.Set("content-type", "application/xml")
+	mc := &MockContext{}
+	mc.On("Request").Return(request)
+
+	err := setBody(reflect.Indirect(reflect.ValueOf(&handler)), mc)
+	require.NotNil(t, err)
+	assert.Contains(t, err.Error(), "application/xml")
+}
+
+func TestSetBodyShouldRequireContentType(t *testing.T) {
+	var handler struct {
+		Body struct {
+			Name string
+		}
+	}
+
+	request := httptest.NewRequest("POST", "/", nil)
+	mc := &MockContext{}
+	mc.On("Request").Return(request)
+
+	err := setBody(reflect.Indirect(reflect.ValueOf(&handler)), mc)
+	assert.Equal(t, err, errNoContentType)
+}
+
+func TestSetBodyShouldParseFormForFormContentType(t *testing.T) {
+	var handler struct {
+		Body struct {
+			Name string
+		}
+	}
+
+	request := httptest.NewRequest("POST", "/", bytes.NewBufferString(`Name=brett`))
+	request.Header.Set("content-type", contentTypeFormEncoded)
+	w := httptest.NewRecorder()
+
+	mc := NewContext(request, w, nil)
+
+	err := setBody(reflect.Indirect(reflect.ValueOf(&handler)), mc)
+	require.NoError(t, err)
+	assert.Equal(t, "brett", handler.Body.Name)
+}
+
+func TestSetBodyShouldParseFormForMultipartFormContentType(t *testing.T) {
+	var handler struct {
+		Body struct {
+			Name string
+		}
+	}
+
+	rawReq := `POST / HTTP/1.1
+Content-Length: 144
+Expect: 100-continue
+Content-Type: multipart/form-data; boundary=------------------------cee38e2aa6ef9de4
+
+--------------------------cee38e2aa6ef9de4
+Content-Disposition: form-data; name="Name"
+
+brett
+--------------------------cee38e2aa6ef9de4--
+`
+
+	request, err := http.ReadRequest(bufio.NewReader(bytes.NewBufferString(rawReq)))
+	require.NoError(t, err)
+
+	mc := NewContext(request, nil, nil)
+
+	err = setBody(reflect.Indirect(reflect.ValueOf(&handler)), mc)
+	require.NoError(t, err)
+	assert.Equal(t, "brett", handler.Body.Name)
 }

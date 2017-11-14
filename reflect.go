@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net/url"
 	"reflect"
+	"strings"
 
 	"github.com/asaskevich/govalidator"
 	"github.com/blockloop/boar/bind"
@@ -18,8 +19,17 @@ const (
 )
 
 var (
-	errNotAStruct  = errors.New("not a struct")
-	errNotSettable = errors.New("not settable")
+	// MultiPartFormMaxMemory says how much memory to send to (*http.Request).ParseMultipartForm
+	// Default is 2MB
+	MultiPartFormMaxMemory = int64(1 << 20) // 2MB
+
+	errNotAStruct    = errors.New("not a struct")
+	errNotSettable   = errors.New("not settable")
+	errNoContentType = errors.New("content-type header was not set on the request")
+
+	contentTypeJSON          = "application/json"
+	contentTypeFormEncoded   = "application/x-www-form-urlencoded"
+	contentTypeMultipartForm = "multipart/form-data"
 )
 
 func checkField(field reflect.Value) (bool, error) {
@@ -86,10 +96,34 @@ func setBody(handler reflect.Value, c Context) error {
 			err:     err,
 		}
 	}
-	if err := c.ReadJSON(field.Addr().Interface()); err != nil {
+	binder, err := getBinder(c)
+	if err != nil {
+		return err
+	}
+
+	if err := binder(field.Addr().Interface()); err != nil {
 		return NewValidationError(bodyField, err)
 	}
 	return validate(bodyField, field.Addr().Interface())
+}
+
+type binderFunc func(interface{}) error
+
+func getBinder(c Context) (binderFunc, error) {
+	ct := c.Request().Header.Get("content-type")
+	switch ct {
+	case "":
+		return nil, errNoContentType
+	case contentTypeJSON:
+		return c.ReadJSON, nil
+	case contentTypeFormEncoded:
+		return c.ReadForm, c.Request().ParseForm()
+	default:
+		if strings.HasPrefix(ct, contentTypeMultipartForm) {
+			return c.ReadForm, c.Request().ParseMultipartForm(MultiPartFormMaxMemory)
+		}
+		return nil, fmt.Errorf("unknown content type: %q", ct)
+	}
 }
 
 func validate(fieldName string, v interface{}) error {

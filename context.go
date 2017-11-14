@@ -1,4 +1,4 @@
-// package boar provides HTTP middleware for semantic and organized HTTP server applications
+// Package boar provides HTTP middleware for semantic and organized HTTP server applications
 package boar
 
 import (
@@ -8,6 +8,7 @@ import (
 	"net/http"
 
 	"github.com/blockloop/boar/bind"
+	"github.com/gorilla/schema"
 	"github.com/julienschmidt/httprouter"
 )
 
@@ -34,6 +35,9 @@ type Context interface {
 	// ReadForm(v interface{}) error
 	ReadJSON(v interface{}) error
 
+	// ReadForm reads the contents of the request form and populates the values of v.
+	ReadForm(v interface{}) error
+
 	// WriteJSON writes the status code and then sends a json response message
 	WriteJSON(status int, v interface{}) error
 
@@ -55,16 +59,18 @@ func NewContext(r *http.Request, w http.ResponseWriter, ps httprouter.Params) Co
 
 func newContext(r *http.Request, w http.ResponseWriter, ps httprouter.Params) *requestContext {
 	return &requestContext{
-		response:  w,
-		request:   r,
-		urlParams: ps,
+		response:   w,
+		request:    r,
+		urlParams:  ps,
+		formParser: schema.NewDecoder(),
 	}
 }
 
 type requestContext struct {
-	response  http.ResponseWriter
-	request   *http.Request
-	urlParams httprouter.Params
+	response   http.ResponseWriter
+	request    *http.Request
+	urlParams  httprouter.Params
+	formParser *schema.Decoder
 }
 
 func (r *requestContext) Context() context.Context {
@@ -93,9 +99,15 @@ func (r *requestContext) Response() http.ResponseWriter {
 }
 
 func (r *requestContext) ReadJSON(v interface{}) error {
-	err := json.NewDecoder(r.Request().Body).Decode(v)
-	if err != nil {
-		return NewHTTPError(http.StatusBadRequest, err)
+	if err := json.NewDecoder(r.Request().Body).Decode(v); err != nil {
+		return NewValidationError(bodyField, err)
+	}
+	return nil
+}
+
+func (r *requestContext) ReadForm(v interface{}) error {
+	if err := r.formParser.Decode(v, r.Request().Form); err != nil {
+		return NewValidationError(bodyField, err)
 	}
 	return nil
 }

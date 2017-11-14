@@ -77,7 +77,7 @@ func (h *httpError) Cause() error {
 }
 
 func (h *httpError) Error() string {
-	return fmt.Sprintf("HTTPError: (status: %d, error: %s)", h.status, h.cause)
+	return fmt.Sprintf("HTTPError: (status: %d, error: %s)", h.Status(), h.Cause())
 }
 
 // MarshalJSON marshals this error to JSON
