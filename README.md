@@ -38,13 +38,13 @@ type Factory struct {
     db store.Store
     log log.Interface
 }
-func NewFactory(db store.Store) Factory {
+func NewFactory(db store.Store, ll log.Interface) Factory {
     return &Factory{
         db: db,
-        log: log,
+        log: ll,
     }
 }
-func (f *Factory) GetPersonByID(c boar.Context) (Handler, error) {
+func (f *Factory) GetPersonByID(c boar.Context) (boar.Handler, error) {
     return &getUser{
         db: f.db,
         log: f.log.WithFields(log.F{
