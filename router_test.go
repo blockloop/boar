@@ -273,3 +273,51 @@ func TestUseShouldNotAddEmptyMiddlewares(t *testing.T) {
 	r.Use(make([]Middleware, 0)...)
 	assert.Len(t, r.mw, 0)
 }
+
+func TestRealRouterReturnsUnderlyingRouter(t *testing.T) {
+	r := NewRouter()
+	assert.NotNil(t, r.RealRouter())
+}
+
+func TestShouldCreateMethodHandlers(t *testing.T) {
+	r := NewRouter()
+
+	items := map[string]func(string, HandlerProviderFunc){
+		http.MethodGet:     r.Get,
+		http.MethodDelete:  r.Delete,
+		http.MethodHead:    r.Head,
+		http.MethodOptions: r.Options,
+		http.MethodPatch:   r.Patch,
+		http.MethodPost:    r.Post,
+		http.MethodPut:     r.Put,
+		http.MethodTrace:   r.Trace,
+	}
+
+	for method, handle := range items {
+		// create a fake handler and assert that Handle was called when executing
+		// a request with the provided method
+		mh := &MockHandler{}
+
+		mh.On("Handle", Anything).Run(func(args Arguments) {
+			c := args.Get(0).(Context)
+			assert.Equal(t, method, c.Request().Method)
+		}).Return(nil)
+
+		// call the router method Get,Delete,etc providing our mock handler
+		handle("/", func(Context) (Handler, error) {
+			return mh, nil
+		})
+
+		// startup a test server with our new router
+		server := httptest.NewServer(r.RealRouter())
+		defer server.Close()
+
+		req, err := http.NewRequest(method, server.URL+"/", nil)
+		require.NoError(t, err)
+
+		_, err = http.DefaultClient.Do(req)
+		require.NoError(t, err)
+
+		mh.AssertCalled(t, "Handle", Anything)
+	}
+}

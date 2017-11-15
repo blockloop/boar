@@ -204,11 +204,6 @@ func (rtr *Router) Patch(path string, h HandlerProviderFunc) {
 	rtr.Method(http.MethodPatch, path, h)
 }
 
-// Connect is a handler that accepts only CONNECT requests
-func (rtr *Router) Connect(path string, h HandlerProviderFunc) {
-	rtr.Method(http.MethodConnect, path, h)
-}
-
 // ListenAndServe is a handler that accepts only LISTENANDSERVE requests
 func (rtr *Router) ListenAndServe(addr string) error {
 	return http.ListenAndServe(addr, rtr.RealRouter())

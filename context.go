@@ -106,6 +106,10 @@ func (r *requestContext) ReadJSON(v interface{}) error {
 }
 
 func (r *requestContext) ReadForm(v interface{}) error {
+	if err := r.Request().ParseForm(); err != nil {
+		return NewValidationError(bodyField, err)
+	}
+
 	if err := r.formParser.Decode(v, r.Request().Form); err != nil {
 		return NewValidationError(bodyField, err)
 	}

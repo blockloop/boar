@@ -1,6 +1,7 @@
 package bind
 
 import (
+	"io"
 	"reflect"
 	"strconv"
 	"testing"
@@ -134,7 +135,21 @@ func TestTypeMismatchErrors(t *testing.T) {
 	for i, kind := range kinds {
 		field := reflect.Indirect(reflect.New(types[i]))
 		err := setSimpleField(field, "myfield", kind, "abcd")
-		assert.Error(t, err)
 		assert.IsType(t, err, &TypeMismatchError{})
 	}
+}
+
+func TestTypeMismatchErrorShouldExplain(t *testing.T) {
+	tme := &TypeMismatchError{
+		cause:     io.ErrClosedPipe,
+		fieldName: "asdfaksjdfh",
+		kind:      reflect.Int,
+		val:       "klasdhjf",
+	}
+
+	str := tme.Error()
+	assert.Contains(t, str, tme.cause.Error())
+	assert.Contains(t, str, tme.fieldName)
+	assert.Contains(t, str, tme.kind.String())
+	assert.Contains(t, str, tme.val)
 }

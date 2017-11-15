@@ -4,9 +4,13 @@ import (
 	"errors"
 	"net/url"
 	"reflect"
+	"strings"
 )
 
-var errUseSlice = errors.New("array fields are not supported. use a slice instead")
+var (
+	errUseSlice              = errors.New("array fields are not supported. use a slice instead")
+	errMultiValueSimpleField = errors.New("multiple values provided for non slice")
+)
 
 const (
 	queryTagKey = "query"
@@ -56,7 +60,17 @@ func QueryValue(obj reflect.Value, q url.Values) error {
 			continue
 		}
 
-		val := vals[0]
+		// simple fields cannot have multiple values
+		if len(vals) > 1 {
+			return &TypeMismatchError{
+				cause:     errMultiValueSimpleField,
+				fieldName: tField.Name,
+				kind:      kind,
+				val:       vals,
+			}
+		}
+
+		val := strings.TrimSpace(vals[0])
 		if val == "" {
 			continue
 		}

@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"reflect"
 	"strconv"
+	"strings"
 )
 
 func setFieldSlice(field reflect.Value, fieldName string, vals []string) error {
@@ -15,6 +16,7 @@ func setFieldSlice(field reflect.Value, fieldName string, vals []string) error {
 	}
 	fieldType := field.Type()
 	for _, v := range vals {
+		v = strings.TrimSpace(v)
 		elemType := fieldType.Elem()
 		fieldVal := reflect.New(elemType)
 		if err := setSimpleField(reflect.Indirect(fieldVal), fieldName, elemType.Kind(), v); err != nil {

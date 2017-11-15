@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"io"
 	"net/http"
+	"sync"
 )
 
 // ResponseWriter is an http.ResponseWriter that captures the status code and body
@@ -23,7 +24,8 @@ var _ ResponseWriter = (*BufferedResponseWriter)(nil)
 // written for retrieval after the response has been sent
 type BufferedResponseWriter struct {
 	base   http.ResponseWriter
-	body   *bytes.Buffer
+	m      *sync.RWMutex
+	body   []byte
 	status int
 }
 
@@ -31,7 +33,8 @@ type BufferedResponseWriter struct {
 func NewBufferedResponseWriter(base http.ResponseWriter) *BufferedResponseWriter {
 	return &BufferedResponseWriter{
 		base:   base,
-		body:   bytes.NewBuffer(make([]byte, 0)),
+		m:      &sync.RWMutex{},
+		body:   make([]byte, 0),
 		status: 0,
 	}
 }
@@ -44,12 +47,20 @@ func NewBufferedResponseWriter(base http.ResponseWriter) *BufferedResponseWriter
 // contents, etc.
 func (w *BufferedResponseWriter) Flush() error {
 	w.base.WriteHeader(w.Status())
-	_, err := io.Copy(w.base, w.body)
+	w.m.RLock()
+	defer w.m.RUnlock()
+	_, err := io.Copy(w.base, bytes.NewBuffer(w.body))
 	return err
 }
 
-// Close flushes the response stream and closes the buffer
+// Close flushes the response stream and closes all buffers. Subsequent calls to Body(), Len(),
+// etc will yield no results
 func (w *BufferedResponseWriter) Close() error {
+	defer func() {
+		w.m.Lock()
+		w.body = make([]byte, 0)
+		w.m.Unlock()
+	}()
 	return w.Flush()
 }
 
@@ -60,12 +71,16 @@ func (w *BufferedResponseWriter) Status() int {
 
 // Body returns everything that has been written to the response
 func (w *BufferedResponseWriter) Body() []byte {
-	return w.body.Bytes()
+	w.m.RLock()
+	defer w.m.RUnlock()
+	return w.body
 }
 
 // Len returns the amount of bytes that have been written so far
 func (w *BufferedResponseWriter) Len() int {
-	return w.body.Len()
+	w.m.RLock()
+	defer w.m.RUnlock()
+	return len(w.body)
 }
 
 // Header returns the header map that will be sent by WriteHeader. The Header map
@@ -80,12 +95,15 @@ func (w *BufferedResponseWriter) Header() http.Header {
 
 // Write writes the data to the connection as part of an HTTP reply.
 func (w *BufferedResponseWriter) Write(b []byte) (n int, err error) {
+	w.m.Lock()
+	defer w.m.Unlock()
 	// This is what the http.ResponseWriter does by default. If the status code has
 	// not already been set then it defaults to http.StatusOK
 	if w.status == 0 {
 		w.status = http.StatusOK
 	}
-	return w.body.Write(b)
+	w.body = append(w.body, b...)
+	return len(b), nil
 }
 
 // WriteHeader sets the http status code. Unlike the default http.ResponseWriter, this does
