@@ -134,10 +134,7 @@ func validate(fieldName string, v interface{}) error {
 	if verr, ok := err.(govalidator.Errors); ok {
 		return NewValidationErrors(fieldName, verr.Errors())
 	}
-	if verr, ok := err.(govalidator.Error); ok {
-		return NewValidationErrors(fieldName, []error{verr})
-	}
-	return err
+	return NewValidationErrors(fieldName, []error{err})
 }
 
 type badFieldError struct {

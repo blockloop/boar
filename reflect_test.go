@@ -280,3 +280,10 @@ brett
 	require.NoError(t, err)
 	assert.Equal(t, "brett", handler.Body.Name)
 }
+
+func TestValidateShouldErrorWhenBadValue(t *testing.T) {
+	var f string
+
+	err := validate("", &f)
+	require.Error(t, err)
+}

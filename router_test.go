@@ -225,6 +225,34 @@ func TestMakeHandlerShouldSetBodyWhenContentLengthIsNotZero(t *testing.T) {
 	assert.Equal(t, 1, handler.Body.Age)
 }
 
+type badBodyHandler struct {
+	Body int
+}
+
+func (*badBodyHandler) Handle(Context) error {
+	return nil
+}
+
+func TestMakeHandlerShouldCallErrorHandlerWhenCantParseBody(t *testing.T) {
+	var called bool
+
+	r := NewRouter()
+	r.SetErrorHandler(func(c Context, err error) {
+		called = true
+	})
+
+	hndlr := r.makeHandler("POST", "/", func(Context) (Handler, error) {
+		return &badBodyHandler{}, nil
+	})
+
+	req := httptest.NewRequest("POST", "/", bytes.NewBufferString(`a`))
+	req.Header.Set("content-type", contentTypeJSON)
+	req.Header.Set("content-length", "1")
+	w := httptest.NewRecorder()
+	hndlr(w, req, nil)
+	assert.True(t, called)
+}
+
 type nopHandler struct{}
 
 func (*nopHandler) Handle(Context) error {
@@ -320,4 +348,42 @@ func TestShouldCreateMethodHandlers(t *testing.T) {
 
 		mh.AssertCalled(t, "Handle", Anything)
 	}
+}
+
+func TestShouldCallErrorHandlerWhenHandlerFails(t *testing.T) {
+	var called bool
+	r := NewRouter()
+	herr := errors.New("asdf")
+
+	r.SetErrorHandler(func(c Context, err error) {
+		called = true
+		assert.Equal(t, herr, err)
+	})
+
+	mh := &MockHandler{}
+	mh.On("Handle", Anything).Return(herr)
+
+	hndlr := r.makeHandler("GET", "/", func(Context) (Handler, error) {
+		return mh, nil
+	})
+
+	req := httptest.NewRequest("GET", "/", nil)
+	w := httptest.NewRecorder()
+	hndlr(w, req, nil)
+	assert.True(t, called)
+	mh.AssertCalled(t, "Handle", Anything)
+}
+
+func TestSimpleHandlerShouldWork(t *testing.T) {
+	r := NewRouter()
+
+	handler := &MockHandler{}
+	handler.On("Handle", Anything)
+
+	r.MethodFunc("GET", "/", handler.Handle)
+
+	server := httptest.NewServer(r.RealRouter())
+	defer server.Close()
+	http.Get(server.URL)
+	handler.AssertCalled(t, "Handle", Anything)
 }
