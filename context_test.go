@@ -15,10 +15,9 @@ import (
 
 func TestWriteJSONSetsContentType(t *testing.T) {
 	w := httptest.NewRecorder()
-	c := NewContext(nil, w, nil)
-	c.WriteJSON(http.StatusTeapot, JSON{})
-	w.Flush()
-	assert.Equal(t, w.Result().Header.Get("content-type"), "application/json")
+	c := newContext(nil, w, nil)
+	c.WriteJSON(http.StatusOK, JSON{})
+	assert.Equal(t, "application/json", w.Result().Header.Get("content-type"))
 }
 
 func TestWriteJSONReturnsErrorWhenJSONEncodeFails(t *testing.T) {
@@ -28,7 +27,8 @@ func TestWriteJSONReturnsErrorWhenJSONEncodeFails(t *testing.T) {
 	w.On("Header", Anything).Return(http.Header{})
 	w.On("WriteHeader", Anything).Return(0)
 
-	c := NewContext(nil, w, nil)
+	c := newContext(nil, nil, nil)
+	c.response = w
 	err := c.WriteJSON(http.StatusTeapot, JSON{})
 	require.Error(t, err, "WriteJSON")
 	assert.Contains(t, err.Error(), expected.Error())
@@ -40,23 +40,28 @@ func TestWriteJSONDoesNotReturnErrorWhenJSONEncodePasses(t *testing.T) {
 	w.On("Header", Anything).Return(http.Header{})
 	w.On("WriteHeader", Anything).Return(0)
 
-	c := NewContext(nil, w, nil)
+	c := newContext(nil, nil, nil)
+	c.response = w
 	err := c.WriteJSON(http.StatusTeapot, JSON{})
 	assert.NoError(t, err)
 }
 
 func TestWriteJSONSetsStatus(t *testing.T) {
 	w := httptest.NewRecorder()
-	c := NewContext(nil, w, nil)
-	c.WriteJSON(http.StatusTeapot, JSON{})
+	c := newContext(nil, w, nil)
+
+	require.NoError(t, c.WriteJSON(http.StatusTeapot, JSON{}))
+	require.NoError(t, c.Response().Flush())
 	w.Flush()
+
 	assert.Equal(t, http.StatusTeapot, w.Result().StatusCode)
 }
 
 func TestWriteStatusSetsResponseStatus(t *testing.T) {
 	w := httptest.NewRecorder()
-	c := NewContext(nil, w, nil)
+	c := newContext(nil, w, nil)
 	c.WriteStatus(http.StatusTeapot)
+	c.Response().Flush()
 	w.Flush()
 	assert.Equal(t, http.StatusTeapot, w.Result().StatusCode)
 }
@@ -65,7 +70,7 @@ func TestContextShouldReturnRequestContext(t *testing.T) {
 	req, err := http.NewRequest("GET", "/", nil)
 	require.NoError(t, err)
 
-	c := NewContext(req, nil, nil)
+	c := newContext(req, nil, nil)
 	assert.Equal(t, req.Context(), c.Context())
 }
 
@@ -78,7 +83,7 @@ func TestReadURLParamsShouldBindParamsFromRequest(t *testing.T) {
 		{Key: "age", Value: "123"},
 	}
 
-	c := NewContext(req, nil, params)
+	c := newContext(req, nil, params)
 
 	var fields struct {
 		Name string `url:"name"`
@@ -97,7 +102,7 @@ func TestReadFormShouldBindFormFields(t *testing.T) {
 	require.NoError(t, err)
 	req.Header.Set("content-type", contentTypeFormEncoded)
 
-	c := NewContext(req, nil, nil)
+	c := newContext(req, nil, nil)
 
 	var fields struct {
 		Name string
@@ -116,7 +121,7 @@ func TestReadFormReturnsErrorIfParseFormFails(t *testing.T) {
 	require.NoError(t, err)
 	req.Header.Set("content-type", contentTypeFormEncoded)
 
-	c := NewContext(req, nil, nil)
+	c := newContext(req, nil, nil)
 
 	var fields struct {
 		Name string
@@ -131,7 +136,7 @@ func TestReadFormReturnsErrorIfMismatchTypes(t *testing.T) {
 	require.NoError(t, err)
 	req.Header.Set("content-type", contentTypeFormEncoded)
 
-	c := NewContext(req, nil, nil)
+	c := newContext(req, nil, nil)
 
 	var fields struct {
 		Name string
@@ -146,7 +151,7 @@ func TestReadQueryShouldBindFields(t *testing.T) {
 	req, err := http.NewRequest("GET", "/?Name=Brett&Age=123", nil)
 	require.NoError(t, err)
 
-	c := NewContext(req, nil, nil)
+	c := newContext(req, nil, nil)
 
 	var fields struct {
 		Name string
@@ -164,7 +169,7 @@ func TestReadQueryShouldReturnValidationErrorIfQueryTypesMismatch(t *testing.T) 
 	req, err := http.NewRequest("GET", "/?Name=Brett&Age=abcd", nil)
 	require.NoError(t, err)
 
-	c := NewContext(req, nil, nil)
+	c := newContext(req, nil, nil)
 
 	var fields struct {
 		Name string

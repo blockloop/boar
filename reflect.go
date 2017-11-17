@@ -99,10 +99,7 @@ func setBody(handler reflect.Value, c Context) error {
 	}
 	binder, err := getBinder(c)
 	if err != nil {
-		if err == errNoContentType {
-			return NewHTTPError(http.StatusBadRequest, err)
-		}
-		return err
+		return NewHTTPError(http.StatusBadRequest, err)
 	}
 
 	if err := binder(field.Addr().Interface()); err != nil {

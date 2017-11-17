@@ -50,6 +50,9 @@ func defaultErrorHandler(c Context, err error) {
 	if werr := c.WriteJSON(httperr.Status(), httperr); werr != nil {
 		log.Printf("ERROR: could not serialize json: %s\n%s", werr, string(debug.Stack()))
 	}
+	if err := c.Response().Flush(); err != nil {
+		log.Printf("ERROR: could not flush response: %s\n%s", err, string(debug.Stack()))
+	}
 	return
 }
 

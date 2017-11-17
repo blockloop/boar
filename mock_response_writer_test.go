@@ -39,6 +39,20 @@ func (_m *MockResponseWriter) Close() error {
 	return r0
 }
 
+// Flush provides a mock function with given fields:
+func (_m *MockResponseWriter) Flush() error {
+	ret := _m.Called()
+
+	var r0 error
+	if rf, ok := ret.Get(0).(func() error); ok {
+		r0 = rf()
+	} else {
+		r0 = ret.Error(0)
+	}
+
+	return r0
+}
+
 // Header provides a mock function with given fields:
 func (_m *MockResponseWriter) Header() http.Header {
 	ret := _m.Called()

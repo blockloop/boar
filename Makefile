@@ -15,6 +15,12 @@ ${GOPATH}/bin/gover:
 cover: covertools
 	@go list -f '{{if len .TestGoFiles}}"go test -coverprofile={{.Dir}}/.coverprofile {{.ImportPath}}"{{end}}' ./... | grep -v vendor/ | xargs -L 1 sh -c
 
+coverage.html: cover
+	@go tool cover -html=.coverprofile -o $@
+
+coverage.bind.html: cover
+	@go tool cover -html=./bind/.coverprofile -o $@
+
 mocks:
 	-@rm mock_*.go 2> /dev/null
 	@mockery -case=underscore -all -recursive=false -inpkg

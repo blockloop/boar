@@ -100,15 +100,15 @@ func (_m *MockContext) Request() *http.Request {
 }
 
 // Response provides a mock function with given fields:
-func (_m *MockContext) Response() http.ResponseWriter {
+func (_m *MockContext) Response() ResponseWriter {
 	ret := _m.Called()
 
-	var r0 http.ResponseWriter
-	if rf, ok := ret.Get(0).(func() http.ResponseWriter); ok {
+	var r0 ResponseWriter
+	if rf, ok := ret.Get(0).(func() ResponseWriter); ok {
 		r0 = rf()
 	} else {
 		if ret.Get(0) != nil {
-			r0 = ret.Get(0).(http.ResponseWriter)
+			r0 = ret.Get(0).(ResponseWriter)
 		}
 	}
 

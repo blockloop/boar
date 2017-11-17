@@ -22,7 +22,7 @@ type Context interface {
 	Request() *http.Request
 
 	// Response returns the underlying http.ResponseWriter
-	Response() http.ResponseWriter
+	Response() ResponseWriter
 
 	// ReadQuery parses the query string from the request into a struct
 	// if the query string has invalid types (e.g. alpha for an int field)
@@ -59,7 +59,7 @@ func NewContext(r *http.Request, w http.ResponseWriter, ps httprouter.Params) Co
 
 func newContext(r *http.Request, w http.ResponseWriter, ps httprouter.Params) *requestContext {
 	return &requestContext{
-		response:   w,
+		response:   NewBufferedResponseWriter(w),
 		request:    r,
 		urlParams:  ps,
 		formParser: schema.NewDecoder(),
@@ -67,7 +67,7 @@ func newContext(r *http.Request, w http.ResponseWriter, ps httprouter.Params) *r
 }
 
 type requestContext struct {
-	response   http.ResponseWriter
+	response   ResponseWriter
 	request    *http.Request
 	urlParams  httprouter.Params
 	formParser *schema.Decoder
@@ -94,7 +94,7 @@ func (r *requestContext) Request() *http.Request {
 	return r.request
 }
 
-func (r *requestContext) Response() http.ResponseWriter {
+func (r *requestContext) Response() ResponseWriter {
 	return r.response
 }
 

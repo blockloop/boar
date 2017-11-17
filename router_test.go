@@ -3,6 +3,7 @@ package boar
 import (
 	"bytes"
 	"errors"
+	"io"
 	"io/ioutil"
 	"log"
 	"net/http"
@@ -28,6 +29,9 @@ func TestDefaultErrorHandlerShouldWriteExistingHTTPError(t *testing.T) {
 		assert.Equal(t, status, args.Get(0))
 		assert.Equal(t, err, args.Get(1))
 	})
+	mr := &MockResponseWriter{}
+	mr.On("Flush").Return(nil)
+	mc.On("Response").Return(mr)
 
 	defaultErrorHandler(mc, err)
 }
@@ -42,6 +46,9 @@ func TestDefaultErrorHandlerShouldLogErrIfWriteJSONFails(t *testing.T) {
 	log.SetOutput(buf)
 
 	mc.On("WriteJSON", Anything, Anything).Return(writeErr)
+	mr := &MockResponseWriter{}
+	mr.On("Flush").Return(nil)
+	mc.On("Response").Return(mr)
 
 	defaultErrorHandler(mc, err)
 	logs, err := ioutil.ReadAll(buf)
@@ -58,8 +65,33 @@ func TestDefaultErrorHandlerShouldMakeNonHTTPErrorsIntoHTTPErrors(t *testing.T) 
 		_, ok := herr.(HTTPError)
 		assert.True(t, ok)
 	})
+	mr := &MockResponseWriter{}
+	mr.On("Flush").Return(nil)
+	mc.On("Response").Return(mr)
 
 	defaultErrorHandler(mc, err)
+}
+
+func TestDefaultErrorHandlerLogsErrorWhenFlushErrors(t *testing.T) {
+	mc := &MockContext{}
+	err := errors.New("something went wrong")
+	mc.On("WriteJSON", Anything, Anything).Return(nil).Run(func(args Arguments) {
+		herr := args.Get(1)
+		assert.NotNil(t, herr)
+		_, ok := herr.(HTTPError)
+		assert.True(t, ok)
+	})
+	mr := &MockResponseWriter{}
+	mr.On("Flush").Return(io.ErrClosedPipe)
+	mc.On("Response").Return(mr)
+
+	buf := bytes.NewBufferString("")
+	log.SetOutput(buf)
+	defaultErrorHandler(mc, err)
+
+	logs, err := ioutil.ReadAll(buf)
+	require.NoError(t, err, "reading log buffer")
+	assert.Contains(t, string(logs), io.ErrClosedPipe.Error())
 }
 
 func TestMakeHandlerShouldCallErrorHandlerWhenNilHandler(t *testing.T) {
@@ -158,7 +190,7 @@ func TestMakeHandlerShouldCallErrorHandlerWhenSetURLParamsFails(t *testing.T) {
 type bodyHandler struct {
 	handle HandlerFunc
 	Body   struct {
-		Age int
+		Age int `valid:"required"`
 	}
 }
 

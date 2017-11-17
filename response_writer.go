@@ -13,6 +13,7 @@ type ResponseWriter interface {
 	http.ResponseWriter
 	io.Closer
 
+	Flush() error
 	Status() int
 	Body() []byte
 	Len() int
