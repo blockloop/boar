@@ -1,7 +1,6 @@
 package boar
 
 import (
-	"bufio"
 	"bytes"
 	"errors"
 	"io/ioutil"
@@ -164,44 +163,6 @@ type bodyHandler struct {
 }
 
 func (h *bodyHandler) Handle(c Context) error { return h.handle(c) }
-
-func TestMakeHandlerShouldNotSetBodyWhenContentLengthIsEmpty(t *testing.T) {
-	var called bool
-
-	r := NewRouter()
-
-	handler := &bodyHandler{}
-	handler.handle = func(Context) error {
-		called = true
-		return nil
-	}
-
-	hndlr := r.makeHandler("POST", "/", func(Context) (Handler, error) {
-		return handler, nil
-	})
-
-	// the only way to set content-length is to use a raw request
-	rawReq := `POST /post HTTP/1.1
-Connection: close
-Accept: */*
-Content-Type: application/json
-Content-Length: 0
-
-{ "Age": 1 }`
-	req, err := http.ReadRequest(bufio.NewReader(bytes.NewBufferString(rawReq)))
-	require.NoError(t, err)
-	assert.Equal(t, "0", req.Header.Get("content-length"))
-
-	w := httptest.NewRecorder()
-	hndlr(w, req, nil)
-
-	require.True(t, called)
-	// even though Age was in the body, the request was not pared because no content-length
-	// this is not a real-world scenario because the content-length is set by frameworks
-	// and therefore will _always_ be set when there is a body. However, this allows
-	// me to test the code which only triggers on ContentLength
-	assert.NotEqual(t, 1, handler.Body.Age)
-}
 
 func TestMakeHandlerShouldSetBodyWhenContentLengthIsNotZero(t *testing.T) {
 	r := NewRouter()
@@ -386,4 +347,46 @@ func TestSimpleHandlerShouldWork(t *testing.T) {
 	defer server.Close()
 	http.Get(server.URL)
 	handler.AssertCalled(t, "Handle", Anything)
+}
+
+func TestShouldValidatePostWhenEmptyBody(t *testing.T) {
+	r := NewRouter()
+
+	bh := &bodyHandler{}
+	bh.handle = func(Context) error {
+		assert.FailNow(t, "called Handle")
+		return nil
+	}
+
+	r.Post("/", func(Context) (Handler, error) {
+		return bh, nil
+	})
+
+	server := httptest.NewServer(r.RealRouter())
+	defer server.Close()
+	resp, err := http.Post(server.URL, contentTypeJSON, bytes.NewBufferString(""))
+	require.NoError(t, err)
+
+	assert.Equal(t, http.StatusBadRequest, resp.StatusCode)
+}
+
+func TestShouldErrorPostWhenNoContentType(t *testing.T) {
+	r := NewRouter()
+
+	bh := &bodyHandler{}
+	bh.handle = func(Context) error {
+		assert.FailNow(t, "called Handle")
+		return nil
+	}
+
+	r.Post("/", func(Context) (Handler, error) {
+		return bh, nil
+	})
+
+	server := httptest.NewServer(r.RealRouter())
+	defer server.Close()
+	resp, err := http.Post(server.URL, "", bytes.NewBufferString(""))
+	require.NoError(t, err)
+
+	assert.Equal(t, http.StatusBadRequest, resp.StatusCode)
 }

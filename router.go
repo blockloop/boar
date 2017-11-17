@@ -114,11 +114,9 @@ func (rtr *Router) makeHandler(method string, path string, createHandler Handler
 			return
 		}
 
-		if r.ContentLength > 0 {
-			if err := setBody(handlerValue, c); err != nil {
-				rtr.errorHandler(c, err)
-				return
-			}
+		if err := setBody(handlerValue, c); err != nil {
+			rtr.errorHandler(c, err)
+			return
 		}
 
 		handle := rtr.withMiddlewares(h.Handle)
@@ -202,11 +200,6 @@ func (rtr *Router) Post(path string, h HandlerProviderFunc) {
 // Patch is a handler that accepts only PATCH requests
 func (rtr *Router) Patch(path string, h HandlerProviderFunc) {
 	rtr.Method(http.MethodPatch, path, h)
-}
-
-// ListenAndServe is a handler that accepts only LISTENANDSERVE requests
-func (rtr *Router) ListenAndServe(addr string) error {
-	return http.ListenAndServe(addr, rtr.RealRouter())
 }
 
 // SetErrorHandler sets the error handler. Any route that returns

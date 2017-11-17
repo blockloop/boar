@@ -3,6 +3,7 @@ package boar
 import (
 	"errors"
 	"fmt"
+	"net/http"
 	"net/url"
 	"reflect"
 	"strings"
@@ -98,6 +99,9 @@ func setBody(handler reflect.Value, c Context) error {
 	}
 	binder, err := getBinder(c)
 	if err != nil {
+		if err == errNoContentType {
+			return NewHTTPError(http.StatusBadRequest, err)
+		}
 		return err
 	}
 

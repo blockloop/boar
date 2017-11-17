@@ -231,7 +231,7 @@ func TestSetBodyShouldRequireContentType(t *testing.T) {
 	mc.On("Request").Return(request)
 
 	err := setBody(reflect.Indirect(reflect.ValueOf(&handler)), mc)
-	assert.Equal(t, err, errNoContentType)
+	assert.IsType(t, &httpError{}, err)
 }
 
 func TestSetBodyShouldParseFormForFormContentType(t *testing.T) {
