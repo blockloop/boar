@@ -100,7 +100,7 @@ func (r *requestContext) Response() http.ResponseWriter {
 
 func (r *requestContext) ReadJSON(v interface{}) error {
 	if err := json.NewDecoder(r.Request().Body).Decode(v); err != nil {
-		return NewValidationError(bodyField, err)
+		return NewValidationError(bodyField, fmt.Errorf("failed to parse JSON body: %v", err))
 	}
 	return nil
 }

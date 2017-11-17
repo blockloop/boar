@@ -390,3 +390,27 @@ func TestShouldErrorPostWhenNoContentType(t *testing.T) {
 
 	assert.Equal(t, http.StatusBadRequest, resp.StatusCode)
 }
+
+func TestErrorsPostWhenEmptyBody(t *testing.T) {
+	r := NewRouter()
+
+	bh := &bodyHandler{}
+	bh.handle = func(Context) error {
+		assert.FailNow(t, "called Handle")
+		return nil
+	}
+
+	r.Post("/", func(Context) (Handler, error) {
+		return bh, nil
+	})
+
+	server := httptest.NewServer(r.RealRouter())
+	defer server.Close()
+	resp, err := http.Post(server.URL, contentTypeJSON, nil)
+	require.NoError(t, err)
+
+	assert.Equal(t, http.StatusBadRequest, resp.StatusCode)
+	body, err := ioutil.ReadAll(resp.Body)
+	require.NoError(t, err)
+	assert.Contains(t, string(body), "EOF")
+}
