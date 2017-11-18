@@ -33,6 +33,10 @@ type Handler interface {
 	Handle(Context) error
 }
 
+var (
+	errNilHandler = errors.New("handler cannot be nil")
+)
+
 func defaultErrorHandler(c Context, err error) {
 	if err == nil {
 		return
@@ -100,7 +104,7 @@ func (rtr *Router) makeHandler(method string, path string, createHandler Handler
 			return
 		}
 		if h == nil {
-			rtr.errorHandler(c, errors.New("handler cannot be nil"))
+			rtr.errorHandler(c, errNilHandler)
 			return
 		}
 
@@ -121,7 +125,7 @@ func (rtr *Router) makeHandler(method string, path string, createHandler Handler
 			return
 		}
 
-		handle := rtr.withMiddlewares(h.Handle)
+		handle := rtr.withMiddlewares(rtr.withErrorHandler(c, h.Handle))
 		if err := handle(c); err != nil {
 			rtr.errorHandler(c, err)
 			return
@@ -152,7 +156,15 @@ func (rtr *Router) Use(mw ...Middleware) {
 	}
 	rtr.mw = append(mw, rtr.mw...)
 }
-
+func (rtr *Router) withErrorHandler(c Context, h HandlerFunc) HandlerFunc {
+	return func(c Context) error {
+		if err := h(c); err != nil {
+			rtr.errorHandler(c, err)
+			return err
+		}
+		return nil
+	}
+}
 func (rtr *Router) withMiddlewares(next HandlerFunc) HandlerFunc {
 	fn := next
 	for i := 0; i < len(rtr.mw); i++ {

@@ -417,3 +417,31 @@ func TestErrorsPostWhenEmptyBody(t *testing.T) {
 	require.NoError(t, err)
 	assert.Contains(t, string(body), "EOF")
 }
+
+func TestHandleShouldWriteErrorsBeforeMiddleware(t *testing.T) {
+	r := NewRouter()
+	var called bool
+	r.Use(func(next HandlerFunc) HandlerFunc {
+		return func(c Context) error {
+			called = true
+			err := next(c)
+			require.Equal(t, err, ErrForbidden)
+			require.Equal(t, http.StatusForbidden, c.Response().Status())
+			return nil
+		}
+	})
+
+	mh := &MockHandler{}
+	mh.On("Handle", Anything).Return(ErrForbidden)
+
+	r.Post("/abcd", func(Context) (Handler, error) {
+		return mh, nil
+	})
+
+	server := httptest.NewServer(r.RealRouter())
+	defer server.Close()
+	http.Post(server.URL+"/abcd", contentTypeJSON, bytes.NewBufferString(`{"name": "brett"}`))
+
+	assert.True(t, called)
+	mh.AssertCalled(t, "Handle", Anything)
+}
