@@ -15,7 +15,6 @@ type ResponseWriter interface {
 
 	Flush() error
 	Status() int
-	Body() []byte
 	Len() int
 }
 
@@ -26,7 +25,7 @@ var _ ResponseWriter = (*BufferedResponseWriter)(nil)
 type BufferedResponseWriter struct {
 	base      http.ResponseWriter
 	m         *sync.RWMutex
-	body      []byte
+	body      *bytes.Buffer
 	status    int
 	flushOnce *sync.Once
 }
@@ -36,7 +35,7 @@ func NewBufferedResponseWriter(base http.ResponseWriter) *BufferedResponseWriter
 	return &BufferedResponseWriter{
 		base:      base,
 		m:         &sync.RWMutex{},
-		body:      make([]byte, 0),
+		body:      bytes.NewBufferString(""),
 		status:    0,
 		flushOnce: &sync.Once{},
 	}
@@ -53,19 +52,14 @@ func (w *BufferedResponseWriter) Flush() (err error) {
 	defer w.m.RUnlock()
 	w.flushOnce.Do(func() {
 		w.base.WriteHeader(w.Status())
-		_, err = io.Copy(w.base, bytes.NewBuffer(w.body))
+		_, err = w.body.WriteTo(w.base)
 	})
 	return err
 }
 
-// Close flushes the response stream and closes all buffers. Subsequent calls to Body(), Len(),
+// Close flushes the response stream and closes the writer. Subsequent calls to Body(), Len(),
 // etc will yield no results
 func (w *BufferedResponseWriter) Close() error {
-	defer func() {
-		w.m.Lock()
-		w.body = make([]byte, 0)
-		w.m.Unlock()
-	}()
 	return w.Flush()
 }
 
@@ -74,18 +68,11 @@ func (w *BufferedResponseWriter) Status() int {
 	return w.status
 }
 
-// Body returns everything that has been written to the response
-func (w *BufferedResponseWriter) Body() []byte {
-	w.m.RLock()
-	defer w.m.RUnlock()
-	return w.body
-}
-
 // Len returns the amount of bytes that have been written so far
 func (w *BufferedResponseWriter) Len() int {
 	w.m.RLock()
 	defer w.m.RUnlock()
-	return len(w.body)
+	return w.body.Len()
 }
 
 // Header returns the header map that will be sent by WriteHeader. The Header map
@@ -107,8 +94,7 @@ func (w *BufferedResponseWriter) Write(b []byte) (n int, err error) {
 	if w.status == 0 {
 		w.status = http.StatusOK
 	}
-	w.body = append(w.body, b...)
-	return len(b), nil
+	return w.body.Write(b)
 }
 
 // WriteHeader sets the http status code. Unlike the default http.ResponseWriter, this does

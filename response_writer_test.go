@@ -1,6 +1,7 @@
 package boar
 
 import (
+	"bytes"
 	"fmt"
 	"io/ioutil"
 	"math/rand"
@@ -19,7 +20,7 @@ func init() {
 
 func TestNewCreatesEmptyBuffer(t *testing.T) {
 	w := NewBufferedResponseWriter(nil)
-	assert.Len(t, w.Body(), 0)
+	assert.NotNil(t, w.body)
 }
 
 func TestFlushWritesHeader(t *testing.T) {
@@ -36,7 +37,7 @@ func TestFlushCopiesBodyToBase(t *testing.T) {
 	w := NewBufferedResponseWriter(rec)
 
 	exp := "hello"
-	w.body = []byte(exp)
+	w.body = bytes.NewBufferString(exp)
 
 	require.NoError(t, w.Flush())
 	rec.Flush()
@@ -54,7 +55,7 @@ func TestCloseFlushesAndClosesTheBuffer(t *testing.T) {
 	w.Write([]byte("asldfhasdf"))
 	require.NoError(t, w.Close())
 
-	assert.Empty(t, w.Body())
+	assert.Empty(t, w.body.Bytes())
 }
 
 func TestWriteSetsStatusToOKIfUnset(t *testing.T) {
@@ -84,7 +85,9 @@ func TestBodyReturnsWrittenBytes(t *testing.T) {
 	exp := "kajshdfalsdf"
 	fmt.Fprintf(w, exp)
 
-	assert.Equal(t, string(w.Body()), exp)
+	body, err := ioutil.ReadAll(w.body)
+	require.NoError(t, err)
+	assert.Equal(t, string(body), exp)
 }
 
 func TestLenReturnsWrittenBytesLength(t *testing.T) {
