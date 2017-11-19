@@ -1,8 +1,6 @@
 # Boar
 
-[![GoDoc](https://godoc.org/github.com/blockloop/boar?status.svg)](https://godoc.org/github.com/blockloop/boar)
-[![Travis](https://img.shields.io/travis/blockloop/boar.svg)](https://travis-ci.org/blockloop/boar)
-[![Coveralls github](https://img.shields.io/coveralls/github/blockloop/boar.svg)](https://coveralls.io/github/blockloop/boar)
+[![GoDoc](https://img.shields.io/badge/godoc-reference-5272B4.svg?style=flat-square)](https://godoc.org/github.com/blockloop/boar)[![Travis](https://img.shields.io/travis/blockloop/boar.svg?style=flat-square)](https://travis-ci.org/blockloop/boar)[![Coveralls github](https://img.shields.io/coveralls/github/blockloop/boar.svg?style=flat-square)](https://coveralls.io/github/blockloop/boar)
 
 
 Boar aims to streamline the design of HTTP server applications by providing separation of concerns usually crammed into HTTP handler functions or chained middlewares. Some of the most common actions are performed automatically before the HTTP handler is even executed.
