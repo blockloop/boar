@@ -24,19 +24,21 @@ var _ ResponseWriter = (*BufferedResponseWriter)(nil)
 // BufferedResponseWriter is an http.ResponseWriter that captures the status code and body
 // written for retrieval after the response has been sent
 type BufferedResponseWriter struct {
-	base   http.ResponseWriter
-	m      *sync.RWMutex
-	body   []byte
-	status int
+	base      http.ResponseWriter
+	m         *sync.RWMutex
+	body      []byte
+	status    int
+	flushOnce *sync.Once
 }
 
 // NewBufferedResponseWriter creates a new BufferedResponseWriter
 func NewBufferedResponseWriter(base http.ResponseWriter) *BufferedResponseWriter {
 	return &BufferedResponseWriter{
-		base:   base,
-		m:      &sync.RWMutex{},
-		body:   make([]byte, 0),
-		status: 0,
+		base:      base,
+		m:         &sync.RWMutex{},
+		body:      make([]byte, 0),
+		status:    0,
+		flushOnce: &sync.Once{},
 	}
 }
 
@@ -46,11 +48,13 @@ func NewBufferedResponseWriter(base http.ResponseWriter) *BufferedResponseWriter
 // Flush is called internally by the Router once all middlewares, handlers, and error handlers
 // have completely executed. This allows the middlewares access to writing headers, reading
 // contents, etc.
-func (w *BufferedResponseWriter) Flush() error {
-	w.base.WriteHeader(w.Status())
+func (w *BufferedResponseWriter) Flush() (err error) {
 	w.m.RLock()
 	defer w.m.RUnlock()
-	_, err := io.Copy(w.base, bytes.NewBuffer(w.body))
+	w.flushOnce.Do(func() {
+		w.base.WriteHeader(w.Status())
+		_, err = io.Copy(w.base, bytes.NewBuffer(w.body))
+	})
 	return err
 }
 

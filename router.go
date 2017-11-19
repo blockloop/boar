@@ -51,6 +51,11 @@ func defaultErrorHandler(c Context, err error) {
 		log.Printf("ERROR: %+v", httperr)
 	}
 
+	if c.Response().Len() > 0 {
+		// the response has already been written
+		return
+	}
+
 	if werr := c.WriteJSON(httperr.Status(), httperr); werr != nil {
 		log.Printf("ERROR: could not serialize json: %s\n%s", werr, string(debug.Stack()))
 	}
@@ -62,8 +67,8 @@ func defaultErrorHandler(c Context, err error) {
 func NewRouterWithBase(r *httprouter.Router) *Router {
 	return &Router{
 		r:            r,
-		errorHandler: defaultErrorHandler,
 		mw:           make([]Middleware, 0),
+		errorHandler: defaultErrorHandler,
 	}
 }
 

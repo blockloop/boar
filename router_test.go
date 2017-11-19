@@ -20,9 +20,14 @@ func TestDefaultErrorHandlerShouldDoNothingToForNilError(t *testing.T) {
 	mc.AssertNotCalled(t, "WriteJSON")
 }
 
-func TestDefaultErrorHandlerShouldWriteExistingHTTPError(t *testing.T) {
+func TestDefaultErrorHandlerWritesExistingHTTPErrorIfNotAlreadyWritten(t *testing.T) {
+	mr := &MockResponseWriter{}
+	mr.On("Len").Return(0)
+
 	mc := &MockContext{}
-	status := 400
+	mc.On("Response").Return(mr)
+
+	status := http.StatusBadRequest
 	err := NewHTTPErrorStatus(status)
 	mc.On("WriteJSON", Anything, Anything).Return(nil).Run(func(args Arguments) {
 		assert.Equal(t, status, args.Get(0))
@@ -42,8 +47,10 @@ func TestDefaultErrorHandlerShouldLogErrIfWriteJSONFails(t *testing.T) {
 	log.SetOutput(buf)
 
 	mc.On("WriteJSON", Anything, Anything).Return(writeErr)
+
 	mr := &MockResponseWriter{}
 	mr.On("Flush").Return(nil)
+	mr.On("Len").Return(0)
 	mc.On("Response").Return(mr)
 
 	defaultErrorHandler(mc, err)
@@ -55,6 +62,9 @@ func TestDefaultErrorHandlerShouldLogErrIfWriteJSONFails(t *testing.T) {
 func TestDefaultErrorHandlerShouldMakeNonHTTPErrorsIntoHTTPErrors(t *testing.T) {
 	mc := &MockContext{}
 	err := errors.New("something went wrong")
+	mr := &MockResponseWriter{}
+	mr.On("Len").Return(0)
+	mc.On("Response").Return(mr)
 	mc.On("WriteJSON", Anything, Anything).Return(nil).Run(func(args Arguments) {
 		herr := args.Get(1)
 		assert.NotNil(t, herr)
@@ -63,6 +73,19 @@ func TestDefaultErrorHandlerShouldMakeNonHTTPErrorsIntoHTTPErrors(t *testing.T) 
 	})
 
 	defaultErrorHandler(mc, err)
+}
+
+func TestDefaultErrorHandlerDoesNotWriteIfAlreadyWritten(t *testing.T) {
+	mrw := &MockResponseWriter{}
+	mrw.On("Len").Return(1)
+
+	mc := &MockContext{}
+	mc.On("Response").Return(mrw)
+	mc.On("WriteJSON", Anything, Anything).Return(nil)
+
+	defaultErrorHandler(mc, errors.New("hello, world"))
+	mrw.AssertCalled(t, "Len")
+	mc.AssertNotCalled(t, "WriteJSON", Anything)
 }
 
 func TestMakeHandlerShouldCallErrorHandlerWhenNilHandler(t *testing.T) {
