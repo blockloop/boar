@@ -1,12 +1,10 @@
 package boar
 
 import (
-	"errors"
 	"fmt"
 	"log"
 	"net/http"
 	"reflect"
-	"runtime/debug"
 
 	"github.com/julienschmidt/httprouter"
 )
@@ -24,51 +22,47 @@ type HandlerFunc func(Context) error
 // this is valuable to use like a factory
 type HandlerProviderFunc func(Context) (Handler, error)
 
-// ErrorHandler is a handler func that is called when an error is returned from
-// a route
-type ErrorHandler func(Context, error)
-
 // Handler is an http Handler
 type Handler interface {
 	Handle(Context) error
 }
 
-var (
-	errNilHandler = errors.New("handler cannot be nil")
-)
+// ErrorHandler is a middleware that handles writing errors back to the client when an error
+// an error occurs in the handler. It is the first middleware executed therefore It should
+// always return the error that it handled
+//
+// ErrorHandler *must be set before the router is declared. When calling NewRouter the
+// ErrorHandler is added as the first middleware in the chain. If ErrorHandler is modified
+// after the router has been created then the old func will be used
+var ErrorHandler Middleware = func(next HandlerFunc) HandlerFunc {
+	return func(c Context) error {
+		err := next(c)
+		if err == nil {
+			return nil
+		}
 
-func defaultErrorHandler(c Context, err error) {
-	if err == nil {
-		return
-	}
+		httperr, ok := err.(HTTPError)
+		if !ok {
+			httperr = NewHTTPError(http.StatusInternalServerError, err)
+		}
 
-	httperr, ok := err.(HTTPError)
-	if !ok {
-		httperr = NewHTTPError(http.StatusInternalServerError, err)
-	}
-	if httperr.Status() > 499 {
-		// log internal server errors
-		log.Printf("ERROR: %+v", httperr)
-	}
+		if c.Response().Len() == 0 {
+			werr := c.WriteJSON(httperr.Status(), httperr)
+			if werr != nil {
+				return fmt.Errorf("unable to serialize JSON to response: %s", werr)
+			}
+		}
 
-	if c.Response().Len() > 0 {
-		// the response has already been written
-		return
+		return httperr
 	}
-
-	if werr := c.WriteJSON(httperr.Status(), httperr); werr != nil {
-		log.Printf("ERROR: could not serialize json: %s\n%s", werr, string(debug.Stack()))
-	}
-	return
 }
 
 // NewRouterWithBase allows you to create a new http router with the provided
 //  httprouter.Router instead of the default httprouter.New()
 func NewRouterWithBase(r *httprouter.Router) *Router {
 	return &Router{
-		r:            r,
-		mw:           make([]Middleware, 0),
-		errorHandler: defaultErrorHandler,
+		r:  r,
+		mw: []Middleware{ErrorHandler},
 	}
 }
 
@@ -79,9 +73,8 @@ func NewRouter() *Router {
 
 // Router is an http router
 type Router struct {
-	r            *httprouter.Router
-	errorHandler ErrorHandler
-	mw           []Middleware
+	r  *httprouter.Router
+	mw []Middleware
 }
 
 // RealRouter returns the httprouter.Router used for actual serving
@@ -89,52 +82,49 @@ func (rtr *Router) RealRouter() *httprouter.Router {
 	return rtr.r
 }
 
+func (rtr *Router) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	rtr.RealRouter().ServeHTTP(w, r)
+}
+
 // Method is a path handler that uses a factory to generate the handler
 // this is particularly useful for filling contextual information into a struct
 // before passing it along to handle the request
 func (rtr *Router) Method(method string, path string, createHandler HandlerProviderFunc) {
-	fn := rtr.makeHandler(method, path, createHandler)
-
-	rtr.RealRouter().Handle(method, path, fn)
-}
-
-func (rtr *Router) makeHandler(method string, path string, createHandler HandlerProviderFunc) httprouter.Handle {
-	return func(w http.ResponseWriter, r *http.Request, ps httprouter.Params) {
+	rtr.RealRouter().Handle(method, path, func(w http.ResponseWriter, r *http.Request, ps httprouter.Params) {
 		c := newContext(r, w, ps)
 		defer c.Response().Flush()
 
-		h, err := createHandler(c)
+		wrappedHandler := withMiddlewares(rtr.mw, requestParserMiddleware(createHandler))
+		wrappedHandler(c)
+	})
+}
+
+// requestParserMiddleware provides the handler with request objects populated by request data such
+// as query string, post body, and url parameters
+func requestParserMiddleware(createHandler HandlerProviderFunc) HandlerFunc {
+	return func(c Context) error {
+		handler, err := createHandler(c)
 		if err != nil {
-			rtr.errorHandler(c, err)
-			return
+			return err
 		}
-		if h == nil {
-			rtr.errorHandler(c, errNilHandler)
-			return
+		if handler == nil {
+			log.Panicf("nil handler provided for %q %q", c.Request().Method, c.Request().URL.Path)
 		}
 
-		handlerValue := reflect.Indirect(reflect.ValueOf(h))
+		handlerValue := reflect.Indirect(reflect.ValueOf(handler))
 
-		if err := setQuery(handlerValue, r.URL.Query()); err != nil {
-			rtr.errorHandler(c, err)
-			return
+		if err := setQuery(handlerValue, c.Request().URL.Query()); err != nil {
+			return err
 		}
 
-		if err := setURLParams(handlerValue, ps); err != nil {
-			rtr.errorHandler(c, err)
-			return
+		if err := setURLParams(handlerValue, c.URLParams()); err != nil {
+			return err
 		}
 
 		if err := setBody(handlerValue, c); err != nil {
-			rtr.errorHandler(c, err)
-			return
+			return err
 		}
-
-		handle := rtr.withMiddlewares(rtr.withErrorHandler(c, h.Handle))
-		if err := handle(c); err != nil {
-			rtr.errorHandler(c, err)
-			return
-		}
+		return handler.Handle(c)
 	}
 }
 
@@ -156,24 +146,15 @@ func (rtr *Router) Use(mw ...Middleware) {
 
 	for i, m := range mw {
 		if m == nil {
-			panic(fmt.Sprintf("cannot use nil middleware at %d: ", i))
+			log.Panicf("cannot use nil middleware at position %d: ", i)
 		}
 	}
-	rtr.mw = append(mw, rtr.mw...)
+	rtr.mw = append(rtr.mw, mw...)
 }
-func (rtr *Router) withErrorHandler(c Context, h HandlerFunc) HandlerFunc {
-	return func(c Context) error {
-		if err := h(c); err != nil {
-			rtr.errorHandler(c, err)
-			return err
-		}
-		return nil
-	}
-}
-func (rtr *Router) withMiddlewares(next HandlerFunc) HandlerFunc {
+
+func withMiddlewares(mws []Middleware, next HandlerFunc) HandlerFunc {
 	fn := next
-	for i := 0; i < len(rtr.mw); i++ {
-		mw := rtr.mw[i]
+	for _, mw := range mws {
 		fn = mw(fn)
 	}
 	return fn
@@ -219,12 +200,6 @@ func (rtr *Router) Post(path string, h HandlerProviderFunc) {
 // Patch is a handler that accepts only PATCH requests
 func (rtr *Router) Patch(path string, h HandlerProviderFunc) {
 	rtr.Method(http.MethodPatch, path, h)
-}
-
-// SetErrorHandler sets the error handler. Any route that returns
-// an error will get routed to this error handler
-func (rtr *Router) SetErrorHandler(h ErrorHandler) {
-	rtr.errorHandler = h
 }
 
 type simpleHandler struct {

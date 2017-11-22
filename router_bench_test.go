@@ -29,7 +29,7 @@ func BenchmarkBoarHandlerWithBody(b *testing.B) {
 	}
 
 	rtr := NewRouter()
-	hndlr := rtr.makeHandler("POST", "/", func(Context) (Handler, error) {
+	rtr.Get("/", func(Context) (Handler, error) {
 		return handler, nil
 	})
 
@@ -38,11 +38,14 @@ func BenchmarkBoarHandlerWithBody(b *testing.B) {
 		"Age": 100,
 		"Charges": [19.99, 20.99, 103.12]
 	}`
+	server := httptest.NewServer(rtr.RealRouter())
+	defer server.Close()
 
 	for i := 0; i < b.N; i++ {
-		r := httptest.NewRequest("POST", "/", bytes.NewBufferString(rawReq))
-		w := httptest.NewRecorder()
-		hndlr(w, r, nil)
+		resp, _ := http.Post("/", contentTypeJSON, bytes.NewBufferString(rawReq))
+		if resp.Body != nil {
+			resp.Body.Close()
+		}
 	}
 }
 
@@ -95,7 +98,7 @@ func BenchmarkBoarHandlerWithBodyAndQuery(b *testing.B) {
 	}
 
 	rtr := NewRouter()
-	hndlr := rtr.makeHandler("POST", "/", func(Context) (Handler, error) {
+	rtr.Method("POST", "/", func(Context) (Handler, error) {
 		return handler, nil
 	})
 
@@ -106,9 +109,10 @@ func BenchmarkBoarHandlerWithBodyAndQuery(b *testing.B) {
 	}`
 
 	for i := 0; i < b.N; i++ {
-		r := httptest.NewRequest("POST", "/?Page=1&PerPage=100", bytes.NewBufferString(rawReq))
-		w := httptest.NewRecorder()
-		hndlr(w, r, nil)
+		resp, _ := http.Post("/?Page=1&PerPage=100", contentTypeJSON, bytes.NewBufferString(rawReq))
+		if resp.Body != nil {
+			resp.Body.Close()
+		}
 	}
 }
 

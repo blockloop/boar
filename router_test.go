@@ -4,11 +4,11 @@ import (
 	"bytes"
 	"errors"
 	"io/ioutil"
-	"log"
 	"net/http"
 	"net/http/httptest"
 	"testing"
 
+	"github.com/julienschmidt/httprouter"
 	"github.com/stretchr/testify/assert"
 	. "github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
@@ -16,7 +16,9 @@ import (
 
 func TestDefaultErrorHandlerShouldDoNothingToForNilError(t *testing.T) {
 	mc := &MockContext{}
-	defaultErrorHandler(mc, nil)
+	ErrorHandler(func(c Context) error {
+		return nil
+	})(mc)
 	mc.AssertNotCalled(t, "WriteJSON")
 }
 
@@ -34,17 +36,16 @@ func TestDefaultErrorHandlerWritesExistingHTTPErrorIfNotAlreadyWritten(t *testin
 		assert.Equal(t, err, args.Get(1))
 	})
 
-	defaultErrorHandler(mc, err)
+	ErrorHandler(func(c Context) error {
+		return err
+	})(mc)
 }
 
-func TestDefaultErrorHandlerShouldLogErrIfWriteJSONFails(t *testing.T) {
+func TestDefaultErrorHandlerReturnsWriteErrIfWriteJSONFails(t *testing.T) {
 	mc := &MockContext{}
 	status := 400
 	err := NewHTTPErrorStatus(status)
 	writeErr := errors.New("something went wrong")
-
-	buf := bytes.NewBufferString("")
-	log.SetOutput(buf)
 
 	mc.On("WriteJSON", Anything, Anything).Return(writeErr)
 
@@ -53,26 +54,27 @@ func TestDefaultErrorHandlerShouldLogErrIfWriteJSONFails(t *testing.T) {
 	mr.On("Len").Return(0)
 	mc.On("Response").Return(mr)
 
-	defaultErrorHandler(mc, err)
-	logs, err := ioutil.ReadAll(buf)
-	require.NoError(t, err, "reading log buffer")
-	assert.Contains(t, string(logs), writeErr.Error())
+	actual := ErrorHandler(func(c Context) error {
+		return err
+	})(mc)
+
+	assert.Contains(t, actual.Error(), writeErr.Error())
 }
 
-func TestDefaultErrorHandlerShouldMakeNonHTTPErrorsIntoHTTPErrors(t *testing.T) {
-	mc := &MockContext{}
+func TestDefaultErrorHandlerMakesNonHTTPErrorsIntoHTTPErrors(t *testing.T) {
 	err := errors.New("something went wrong")
 	mr := &MockResponseWriter{}
 	mr.On("Len").Return(0)
-	mc.On("Response").Return(mr)
-	mc.On("WriteJSON", Anything, Anything).Return(nil).Run(func(args Arguments) {
-		herr := args.Get(1)
-		assert.NotNil(t, herr)
-		_, ok := herr.(HTTPError)
-		assert.True(t, ok)
-	})
 
-	defaultErrorHandler(mc, err)
+	mc := &MockContext{}
+	mc.On("Response").Return(mr)
+	mc.On("WriteJSON", Anything, Anything).Return(nil)
+
+	actual := ErrorHandler(func(c Context) error {
+		return err
+	})(mc)
+
+	assert.IsType(t, &httpError{}, actual)
 }
 
 func TestDefaultErrorHandlerDoesNotWriteIfAlreadyWritten(t *testing.T) {
@@ -83,48 +85,32 @@ func TestDefaultErrorHandlerDoesNotWriteIfAlreadyWritten(t *testing.T) {
 	mc.On("Response").Return(mrw)
 	mc.On("WriteJSON", Anything, Anything).Return(nil)
 
-	defaultErrorHandler(mc, errors.New("hello, world"))
+	ErrorHandler(func(c Context) error {
+		return errors.New("hello, world")
+	})(mc)
+
 	mrw.AssertCalled(t, "Len")
 	mc.AssertNotCalled(t, "WriteJSON", Anything)
 }
 
-func TestMakeHandlerShouldCallErrorHandlerWhenNilHandler(t *testing.T) {
-	var called bool
-
-	r := NewRouter()
-	r.SetErrorHandler(func(c Context, err error) {
-		called = true
-	})
-
-	hndlr := r.makeHandler("GET", "/", func(Context) (Handler, error) {
+func TestRequestParserMiddlewarePanicsWhenNilHandler(t *testing.T) {
+	handle := requestParserMiddleware(func(Context) (Handler, error) {
 		return nil, nil
 	})
 
-	req := httptest.NewRequest("GET", "/", nil)
-	w := httptest.NewRecorder()
-	hndlr(w, req, nil)
-	assert.True(t, called)
+	assert.Panics(t, func() {
+		handle(nil)
+	})
 }
 
-func TestMakeHandlerShouldCallErrorHandlerWhenErrorOnCreateHandler(t *testing.T) {
-	var called bool
-
-	r := NewRouter()
-	hErr := errors.New("")
-
-	r.SetErrorHandler(func(c Context, err error) {
-		called = true
-		assert.Equal(t, hErr, err)
+func TestMakeHandlerReturnsErrorWhenErrorOnCreateHandler(t *testing.T) {
+	err := errors.New("something broke")
+	handle := requestParserMiddleware(func(Context) (Handler, error) {
+		return nil, err
 	})
 
-	hndlr := r.makeHandler("GET", "/", func(Context) (Handler, error) {
-		return nil, hErr
-	})
-
-	req := httptest.NewRequest("GET", "/", nil)
-	w := httptest.NewRecorder()
-	hndlr(w, req, nil)
-	assert.True(t, called)
+	actual := handle(nil)
+	assert.Equal(t, err, actual)
 }
 
 type badQueryHandler struct {
@@ -133,25 +119,18 @@ type badQueryHandler struct {
 
 func (h *badQueryHandler) Handle(Context) error { return nil }
 
-func TestMakeHandlerShouldCallErrorHandlerWhenSetQueryFails(t *testing.T) {
-	var called bool
-
-	r := NewRouter()
-
-	r.SetErrorHandler(func(c Context, err error) {
-		called = true
-		require.Error(t, err)
-		assert.Contains(t, err.Error(), "Query")
-	})
-
-	hndlr := r.makeHandler("GET", "/", func(Context) (Handler, error) {
+func TestRequestParserMiddlewareReturnsErrorWhenSetQueryFails(t *testing.T) {
+	handle := requestParserMiddleware(func(Context) (Handler, error) {
 		return &badQueryHandler{}, nil
 	})
 
-	req := httptest.NewRequest("GET", "/", nil)
-	w := httptest.NewRecorder()
-	hndlr(w, req, nil)
-	assert.True(t, called)
+	req := httptest.NewRequest("GET", "/?hello=world", nil)
+
+	mc := &MockContext{}
+	mc.On("Request").Return(req)
+
+	err := handle(mc)
+	assert.Error(t, err)
 }
 
 type badURLParamsHandler struct {
@@ -160,25 +139,19 @@ type badURLParamsHandler struct {
 
 func (h *badURLParamsHandler) Handle(Context) error { return nil }
 
-func TestMakeHandlerShouldCallErrorHandlerWhenSetURLParamsFails(t *testing.T) {
-	var called bool
-
-	r := NewRouter()
-
-	r.SetErrorHandler(func(c Context, err error) {
-		called = true
-		require.Error(t, err)
-		assert.Contains(t, err.Error(), "URL")
-	})
-
-	hndlr := r.makeHandler("GET", "/", func(Context) (Handler, error) {
+func TestRequestParserMiddlewareReturnsErrorWhenSetURLParamsFails(t *testing.T) {
+	handle := requestParserMiddleware(func(Context) (Handler, error) {
 		return &badURLParamsHandler{}, nil
 	})
 
 	req := httptest.NewRequest("GET", "/", nil)
-	w := httptest.NewRecorder()
-	hndlr(w, req, nil)
-	assert.True(t, called)
+
+	mc := &MockContext{}
+	mc.On("Request").Return(req)
+	mc.On("URLParams").Return(httprouter.Params{})
+
+	err := handle(mc)
+	assert.Error(t, err)
 }
 
 type bodyHandler struct {
@@ -190,28 +163,6 @@ type bodyHandler struct {
 
 func (h *bodyHandler) Handle(c Context) error { return h.handle(c) }
 
-func TestMakeHandlerShouldSetBodyWhenContentLengthIsNotZero(t *testing.T) {
-	r := NewRouter()
-
-	handler := &bodyHandler{}
-	handler.handle = func(Context) error {
-		return nil
-	}
-
-	hndlr := r.makeHandler("POST", "/", func(Context) (Handler, error) {
-		return handler, nil
-	})
-
-	req, err := http.NewRequest("POST", "/", bytes.NewBufferString(`{ "Age": 1 }`))
-	require.NoError(t, err)
-	req.Header.Set("content-type", contentTypeJSON)
-
-	w := httptest.NewRecorder()
-	hndlr(w, req, nil)
-
-	assert.Equal(t, 1, handler.Body.Age)
-}
-
 type badBodyHandler struct {
 	Body int
 }
@@ -220,24 +171,20 @@ func (*badBodyHandler) Handle(Context) error {
 	return nil
 }
 
-func TestMakeHandlerShouldCallErrorHandlerWhenCantParseBody(t *testing.T) {
-	var called bool
-
-	r := NewRouter()
-	r.SetErrorHandler(func(c Context, err error) {
-		called = true
-	})
-
-	hndlr := r.makeHandler("POST", "/", func(Context) (Handler, error) {
+func TestRequestParserMiddlewareReturnsErrorWhenSetBodyFails(t *testing.T) {
+	handle := requestParserMiddleware(func(Context) (Handler, error) {
 		return &badBodyHandler{}, nil
 	})
 
-	req := httptest.NewRequest("POST", "/", bytes.NewBufferString(`a`))
+	req := httptest.NewRequest("POST", "/", bytes.NewBufferString("{}"))
 	req.Header.Set("content-type", contentTypeJSON)
-	req.Header.Set("content-length", "1")
-	w := httptest.NewRecorder()
-	hndlr(w, req, nil)
-	assert.True(t, called)
+
+	mc := &MockContext{}
+	mc.On("Request").Return(req)
+	mc.On("URLParams").Return(httprouter.Params{})
+
+	err := handle(mc)
+	assert.Error(t, err)
 }
 
 type nopHandler struct{}
@@ -253,27 +200,35 @@ func TestShouldExecuteMiddlewaresInExactOrder(t *testing.T) {
 
 	r.Use(func(next HandlerFunc) HandlerFunc {
 		return func(c Context) error {
-			items = append(items, "a")
-			return next(c)
+			err := next(c)
+			items = append(items, "first")
+			return err
 		}
 	})
 	r.Use(func(next HandlerFunc) HandlerFunc {
 		return func(c Context) error {
-			items = append(items, "b")
-			return next(c)
+			err := next(c)
+			items = append(items, "second")
+			return err
 		}
 	})
 
-	hndlr := r.makeHandler("GET", "/", func(Context) (Handler, error) {
-		return &nopHandler{}, nil
+	mh := &MockHandler{}
+	mh.On("Handle", Anything).Run(func(args Arguments) {
+		args.Get(0).(Context).WriteStatus(http.StatusOK)
+	}).Return(nil)
+
+	r.Get("/", func(Context) (Handler, error) {
+		return mh, nil
 	})
 
-	req := httptest.NewRequest("GET", "/", nil)
-	w := httptest.NewRecorder()
-	hndlr(w, req, nil)
-	assert.Len(t, items, 2)
-	assert.Equal(t, items[0], "a")
-	assert.Equal(t, items[1], "b")
+	server := httptest.NewServer(r)
+	defer server.Close()
+
+	_, err := http.Get(server.URL)
+	require.NoError(t, err)
+
+	assert.Equal(t, []string{"first", "second"}, items)
 }
 
 func TestUseShouldPanicIfNilMiddleware(t *testing.T) {
@@ -283,15 +238,16 @@ func TestUseShouldPanicIfNilMiddleware(t *testing.T) {
 	})
 }
 
-func TestUseShouldNotAddEmptyMiddlewares(t *testing.T) {
+func TestUseShouldNotAddNilMiddlewares(t *testing.T) {
 	r := NewRouter()
+	start := len(r.mw)
 	r.Use(make([]Middleware, 0)...)
-	assert.Len(t, r.mw, 0)
+	assert.Len(t, r.mw, start)
 }
 
 func TestRealRouterReturnsUnderlyingRouter(t *testing.T) {
 	r := NewRouter()
-	assert.NotNil(t, r.RealRouter())
+	assert.NotNil(t, r)
 }
 
 func TestShouldCreateMethodHandlers(t *testing.T) {
@@ -324,7 +280,7 @@ func TestShouldCreateMethodHandlers(t *testing.T) {
 		})
 
 		// startup a test server with our new router
-		server := httptest.NewServer(r.RealRouter())
+		server := httptest.NewServer(r)
 		defer server.Close()
 
 		req, err := http.NewRequest(method, server.URL+"/", nil)
@@ -337,39 +293,39 @@ func TestShouldCreateMethodHandlers(t *testing.T) {
 	}
 }
 
-func TestShouldCallErrorHandlerWhenHandlerFails(t *testing.T) {
-	var called bool
-	r := NewRouter()
-	herr := errors.New("asdf")
+// func TestShouldCallErrorHandlerWhenHandlerFails(t *testing.T) {
+// 	var called bool
+// 	r := NewRouter()
+// 	herr := errors.New("asdf")
 
-	r.SetErrorHandler(func(c Context, err error) {
-		called = true
-		assert.Equal(t, herr, err)
-	})
+// 	r.SetErrorHandler(func(c Context, err error) {
+// 		called = true
+// 		assert.Equal(t, herr, err)
+// 	})
 
-	mh := &MockHandler{}
-	mh.On("Handle", Anything).Return(herr)
+// 	mh := &MockHandler{}
+// 	mh.On("Handle", Anything).Return(herr)
 
-	hndlr := r.makeHandler("GET", "/", func(Context) (Handler, error) {
-		return mh, nil
-	})
+// 	hndlr := r.makeHandler("GET", "/", func(Context) (Handler, error) {
+// 		return mh, nil
+// 	})
 
-	req := httptest.NewRequest("GET", "/", nil)
-	w := httptest.NewRecorder()
-	hndlr(w, req, nil)
-	assert.True(t, called)
-	mh.AssertCalled(t, "Handle", Anything)
-}
+// 	req := httptest.NewRequest("GET", "/", nil)
+// 	w := httptest.NewRecorder()
+// 	hndlr(w, req, nil)
+// 	assert.True(t, called)
+// 	mh.AssertCalled(t, "Handle", Anything)
+// }
 
 func TestSimpleHandlerShouldWork(t *testing.T) {
 	r := NewRouter()
 
 	handler := &MockHandler{}
-	handler.On("Handle", Anything)
+	handler.On("Handle", Anything).Return(nil)
 
 	r.MethodFunc("GET", "/", handler.Handle)
 
-	server := httptest.NewServer(r.RealRouter())
+	server := httptest.NewServer(r)
 	defer server.Close()
 	http.Get(server.URL)
 	handler.AssertCalled(t, "Handle", Anything)
@@ -388,7 +344,7 @@ func TestShouldValidatePostWhenEmptyBody(t *testing.T) {
 		return bh, nil
 	})
 
-	server := httptest.NewServer(r.RealRouter())
+	server := httptest.NewServer(r)
 	defer server.Close()
 	resp, err := http.Post(server.URL, contentTypeJSON, bytes.NewBufferString(""))
 	require.NoError(t, err)
@@ -409,7 +365,7 @@ func TestShouldErrorPostWhenNoContentType(t *testing.T) {
 		return bh, nil
 	})
 
-	server := httptest.NewServer(r.RealRouter())
+	server := httptest.NewServer(r)
 	defer server.Close()
 	resp, err := http.Post(server.URL, "", bytes.NewBufferString(""))
 	require.NoError(t, err)
@@ -430,7 +386,7 @@ func TestErrorsPostWhenEmptyBody(t *testing.T) {
 		return bh, nil
 	})
 
-	server := httptest.NewServer(r.RealRouter())
+	server := httptest.NewServer(r)
 	defer server.Close()
 	resp, err := http.Post(server.URL, contentTypeJSON, nil)
 	require.NoError(t, err)
@@ -441,30 +397,35 @@ func TestErrorsPostWhenEmptyBody(t *testing.T) {
 	assert.Contains(t, string(body), "EOF")
 }
 
-func TestHandleShouldWriteErrorsBeforeMiddleware(t *testing.T) {
+func TestCallsErrHandlerAsFirstMiddleware(t *testing.T) {
+	var errHandlerCalled bool
+	ErrorHandler = func(next HandlerFunc) HandlerFunc {
+		return func(c Context) error {
+			errHandlerCalled = true
+			return next(c)
+		}
+	}
+
 	r := NewRouter()
-	var called bool
+
 	r.Use(func(next HandlerFunc) HandlerFunc {
 		return func(c Context) error {
-			called = true
 			err := next(c)
-			require.Equal(t, err, ErrForbidden)
-			require.Equal(t, http.StatusForbidden, c.Response().Status())
-			return nil
+			require.True(t, errHandlerCalled)
+			return err
 		}
 	})
 
 	mh := &MockHandler{}
-	mh.On("Handle", Anything).Return(ErrForbidden)
+	mh.On("Handle", Anything).Return(nil)
 
-	r.Post("/abcd", func(Context) (Handler, error) {
+	r.Get("/", func(Context) (Handler, error) {
 		return mh, nil
 	})
 
-	server := httptest.NewServer(r.RealRouter())
+	server := httptest.NewServer(r)
 	defer server.Close()
-	http.Post(server.URL+"/abcd", contentTypeJSON, bytes.NewBufferString(`{"name": "brett"}`))
 
-	assert.True(t, called)
-	mh.AssertCalled(t, "Handle", Anything)
+	_, err := http.Get(server.URL + "/")
+	require.NoError(t, err)
 }
