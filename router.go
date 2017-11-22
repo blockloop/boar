@@ -61,8 +61,8 @@ var ErrorHandler Middleware = func(next HandlerFunc) HandlerFunc {
 //  httprouter.Router instead of the default httprouter.New()
 func NewRouterWithBase(r *httprouter.Router) *Router {
 	return &Router{
-		r:  r,
-		mw: []Middleware{ErrorHandler},
+		base:        r,
+		middlewares: []Middleware{ErrorHandler},
 	}
 }
 
@@ -73,13 +73,13 @@ func NewRouter() *Router {
 
 // Router is an http router
 type Router struct {
-	r  *httprouter.Router
-	mw []Middleware
+	base        *httprouter.Router
+	middlewares []Middleware
 }
 
 // RealRouter returns the httprouter.Router used for actual serving
 func (rtr *Router) RealRouter() *httprouter.Router {
-	return rtr.r
+	return rtr.base
 }
 
 func (rtr *Router) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -94,7 +94,7 @@ func (rtr *Router) Method(method string, path string, createHandler HandlerProvi
 		c := newContext(r, w, ps)
 		defer c.Response().Flush()
 
-		wrappedHandler := withMiddlewares(rtr.mw, requestParserMiddleware(createHandler))
+		wrappedHandler := withMiddlewares(rtr.middlewares, requestParserMiddleware(createHandler))
 		wrappedHandler(c)
 	})
 }
@@ -149,7 +149,7 @@ func (rtr *Router) Use(mw ...Middleware) {
 			log.Panicf("cannot use nil middleware at position %d: ", i)
 		}
 	}
-	rtr.mw = append(rtr.mw, mw...)
+	rtr.middlewares = append(rtr.middlewares, mw...)
 }
 
 func withMiddlewares(mws []Middleware, next HandlerFunc) HandlerFunc {

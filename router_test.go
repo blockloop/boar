@@ -240,9 +240,9 @@ func TestUseShouldPanicIfNilMiddleware(t *testing.T) {
 
 func TestUseShouldNotAddNilMiddlewares(t *testing.T) {
 	r := NewRouter()
-	start := len(r.mw)
+	start := len(r.middlewares)
 	r.Use(make([]Middleware, 0)...)
-	assert.Len(t, r.mw, start)
+	assert.Len(t, r.middlewares, start)
 }
 
 func TestRealRouterReturnsUnderlyingRouter(t *testing.T) {
