@@ -9,22 +9,6 @@ type MockResponseWriter struct {
 	mock.Mock
 }
 
-// Body provides a mock function with given fields:
-func (_m *MockResponseWriter) Body() []byte {
-	ret := _m.Called()
-
-	var r0 []byte
-	if rf, ok := ret.Get(0).(func() []byte); ok {
-		r0 = rf()
-	} else {
-		if ret.Get(0) != nil {
-			r0 = ret.Get(0).([]byte)
-		}
-	}
-
-	return r0
-}
-
 // Close provides a mock function with given fields:
 func (_m *MockResponseWriter) Close() error {
 	ret := _m.Called()

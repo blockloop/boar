@@ -154,6 +154,29 @@ func TestRequestParserMiddlewareReturnsErrorWhenSetURLParamsFails(t *testing.T) 
 	assert.Error(t, err)
 }
 
+type urlParamsHandler struct {
+	handle    HandlerFunc
+	URLParams struct {
+		Age int `valid:"required"`
+	}
+}
+
+func (h *urlParamsHandler) Handle(c Context) error { return h.handle(c) }
+
+func TestRequestParserMiddlewareReturns404WhenSetURLParamsFailsValidation(t *testing.T) {
+	r := NewRouter()
+	r.Get("/users/:id", func(Context) (Handler, error) {
+		return &urlParamsHandler{}, nil
+	})
+
+	req := httptest.NewRequest("GET", "/users/1", nil)
+	rec := httptest.NewRecorder()
+	r.ServeHTTP(rec, req)
+	rec.Flush()
+
+	assert.Equal(t, http.StatusNotFound, rec.Result().StatusCode)
+}
+
 type bodyHandler struct {
 	handle HandlerFunc
 	Body   struct {
@@ -290,30 +313,6 @@ func TestShouldCreateMethodHandlers(t *testing.T) {
 	}
 }
 
-// func TestShouldCallErrorHandlerWhenHandlerFails(t *testing.T) {
-// 	var called bool
-// 	r := NewRouter()
-// 	herr := errors.New("asdf")
-
-// 	r.SetErrorHandler(func(c Context, err error) {
-// 		called = true
-// 		assert.Equal(t, herr, err)
-// 	})
-
-// 	mh := &MockHandler{}
-// 	mh.On("Handle", Anything).Return(herr)
-
-// 	hndlr := r.makeHandler("GET", "/", func(Context) (Handler, error) {
-// 		return mh, nil
-// 	})
-
-// 	req := httptest.NewRequest("GET", "/", nil)
-// 	w := httptest.NewRecorder()
-// 	hndlr(w, req, nil)
-// 	assert.True(t, called)
-// 	mh.AssertCalled(t, "Handle", Anything)
-// }
-
 func TestSimpleHandlerShouldWork(t *testing.T) {
 	r := NewRouter()
 
@@ -322,9 +321,7 @@ func TestSimpleHandlerShouldWork(t *testing.T) {
 
 	r.MethodFunc("GET", "/", handler.Handle)
 
-	server := httptest.NewServer(r)
-	defer server.Close()
-	http.Get(server.URL)
+	r.ServeHTTP(httptest.NewRecorder(), httptest.NewRequest("GET", "/", nil))
 	handler.AssertCalled(t, "Handle", Anything)
 }
 
@@ -341,10 +338,14 @@ func TestShouldValidatePostWhenEmptyBody(t *testing.T) {
 		return bh, nil
 	})
 
-	server := httptest.NewServer(r)
-	defer server.Close()
-	resp, err := http.Post(server.URL, contentTypeJSON, bytes.NewBufferString(""))
-	require.NoError(t, err)
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest("POST", "/", bytes.NewBufferString(""))
+	req.Header.Set("content-type", contentTypeJSON)
+
+	r.ServeHTTP(rec, req)
+
+	rec.Flush()
+	resp := rec.Result()
 
 	assert.Equal(t, http.StatusBadRequest, resp.StatusCode)
 }
@@ -362,10 +363,11 @@ func TestShouldErrorPostWhenNoContentType(t *testing.T) {
 		return bh, nil
 	})
 
-	server := httptest.NewServer(r)
-	defer server.Close()
-	resp, err := http.Post(server.URL, "", bytes.NewBufferString(""))
-	require.NoError(t, err)
+	req := httptest.NewRequest("POST", "/", bytes.NewBufferString(""))
+	rec := httptest.NewRecorder()
+	r.ServeHTTP(rec, req)
+
+	resp := rec.Result()
 
 	assert.Equal(t, http.StatusBadRequest, resp.StatusCode)
 }
@@ -400,48 +402,18 @@ func TestErrorsPostWhenEmptyBody(t *testing.T) {
 		return bh, nil
 	})
 
-	server := httptest.NewServer(r)
-	defer server.Close()
-	resp, err := http.Post(server.URL, contentTypeJSON, nil)
-	require.NoError(t, err)
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest("POST", "/", nil)
+	req.Header.Set("content-type", contentTypeJSON)
+
+	r.ServeHTTP(rec, req)
+
+	resp := rec.Result()
 
 	assert.Equal(t, http.StatusBadRequest, resp.StatusCode)
 	body, err := ioutil.ReadAll(resp.Body)
 	require.NoError(t, err)
 	assert.Contains(t, string(body), "EOF")
-}
-
-func TestCallsErrHandlerAsFirstMiddleware(t *testing.T) {
-	var errHandlerCalled bool
-
-	r := NewRouter()
-	r.ErrorHandler = func(next HandlerFunc) HandlerFunc {
-		return func(c Context) error {
-			errHandlerCalled = true
-			return next(c)
-		}
-	}
-
-	r.Use(func(next HandlerFunc) HandlerFunc {
-		return func(c Context) error {
-			err := next(c)
-			require.True(t, errHandlerCalled)
-			return err
-		}
-	})
-
-	mh := &MockHandler{}
-	mh.On("Handle", Anything).Return(nil)
-
-	r.Get("/", func(Context) (Handler, error) {
-		return mh, nil
-	})
-
-	server := httptest.NewServer(r)
-	defer server.Close()
-
-	_, err := http.Get(server.URL + "/")
-	require.NoError(t, err)
 }
 
 func TestHandlesErrorsBetweenMiddlewares(t *testing.T) {

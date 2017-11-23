@@ -1,6 +1,6 @@
 
 test:
-	go test -v ./...
+	go test -race -count=3 ./...
 
 covertools: ${GOPATH}/bin/cover ${GOPATH}/bin/goveralls ${GOPATH}/bin/gover
 .PHONY: covertools
