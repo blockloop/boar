@@ -27,14 +27,7 @@ type Handler interface {
 	Handle(Context) error
 }
 
-// ErrorHandler is a middleware that handles writing errors back to the client when an error
-// an error occurs in the handler. It is the first middleware executed therefore It should
-// always return the error that it handled
-//
-// ErrorHandler *must be set before the router is declared. When calling NewRouter the
-// ErrorHandler is added as the first middleware in the chain. If ErrorHandler is modified
-// after the router has been created then the old func will be used
-var ErrorHandler Middleware = func(next HandlerFunc) HandlerFunc {
+var defaultErrorHandler Middleware = func(next HandlerFunc) HandlerFunc {
 	return func(c Context) error {
 		err := next(c)
 		if err == nil {
@@ -60,10 +53,12 @@ var ErrorHandler Middleware = func(next HandlerFunc) HandlerFunc {
 // NewRouterWithBase allows you to create a new http router with the provided
 //  httprouter.Router instead of the default httprouter.New()
 func NewRouterWithBase(r *httprouter.Router) *Router {
-	return &Router{
-		base:        r,
-		middlewares: []Middleware{ErrorHandler},
+	rtr := &Router{
+		base:         r,
+		ErrorHandler: defaultErrorHandler,
 	}
+	rtr.middlewares = []Middleware{rtr.errorHandlerWrap}
+	return rtr
 }
 
 // NewRouter creates a new router for handling http requests
@@ -75,6 +70,10 @@ func NewRouter() *Router {
 type Router struct {
 	base        *httprouter.Router
 	middlewares []Middleware
+	// ErrorHandler is a middleware that handles writing errors back to the client when an error
+	// an error occurs in the handler. It is the first middleware executed therefore It should
+	// always return the error that it handled
+	ErrorHandler Middleware
 }
 
 // RealRouter returns the httprouter.Router used for actual serving
@@ -152,12 +151,12 @@ func (rtr *Router) Use(mw ...Middleware) {
 	rtr.middlewares = append(rtr.middlewares, mw...)
 }
 
-func withMiddlewares(mws []Middleware, next HandlerFunc) HandlerFunc {
-	fn := next
-	for _, mw := range mws {
-		fn = mw(fn)
-	}
-	return fn
+// errorHandlerWrap wrapps rtr.ErrorHandler. Because ErrorHandler is settable and users
+// can change the ErrorHandler var, this func is used as a wrapper to call whatever current
+// ErrorHandler is set at the time of execution. If ErrorHandler was simply added to Middlewares
+// at NewRouter then the func would be unchanagable.
+func (rtr *Router) errorHandlerWrap(next HandlerFunc) HandlerFunc {
+	return rtr.ErrorHandler(next)
 }
 
 // Head is a handler that acceps HEAD requests
@@ -200,6 +199,14 @@ func (rtr *Router) Post(path string, h HandlerProviderFunc) {
 // Patch is a handler that accepts only PATCH requests
 func (rtr *Router) Patch(path string, h HandlerProviderFunc) {
 	rtr.Method(http.MethodPatch, path, h)
+}
+
+func withMiddlewares(mws []Middleware, next HandlerFunc) HandlerFunc {
+	fn := next
+	for _, mw := range mws {
+		fn = mw(fn)
+	}
+	return fn
 }
 
 type simpleHandler struct {

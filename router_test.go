@@ -16,7 +16,7 @@ import (
 
 func TestDefaultErrorHandlerShouldDoNothingToForNilError(t *testing.T) {
 	mc := &MockContext{}
-	ErrorHandler(func(c Context) error {
+	defaultErrorHandler(func(c Context) error {
 		return nil
 	})(mc)
 	mc.AssertNotCalled(t, "WriteJSON")
@@ -36,7 +36,7 @@ func TestDefaultErrorHandlerWritesExistingHTTPErrorIfNotAlreadyWritten(t *testin
 		assert.Equal(t, err, args.Get(1))
 	})
 
-	ErrorHandler(func(c Context) error {
+	defaultErrorHandler(func(c Context) error {
 		return err
 	})(mc)
 }
@@ -54,7 +54,7 @@ func TestDefaultErrorHandlerReturnsWriteErrIfWriteJSONFails(t *testing.T) {
 	mr.On("Len").Return(0)
 	mc.On("Response").Return(mr)
 
-	actual := ErrorHandler(func(c Context) error {
+	actual := defaultErrorHandler(func(c Context) error {
 		return err
 	})(mc)
 
@@ -70,7 +70,7 @@ func TestDefaultErrorHandlerMakesNonHTTPErrorsIntoHTTPErrors(t *testing.T) {
 	mc.On("Response").Return(mr)
 	mc.On("WriteJSON", Anything, Anything).Return(nil)
 
-	actual := ErrorHandler(func(c Context) error {
+	actual := defaultErrorHandler(func(c Context) error {
 		return err
 	})(mc)
 
@@ -85,7 +85,7 @@ func TestDefaultErrorHandlerDoesNotWriteIfAlreadyWritten(t *testing.T) {
 	mc.On("Response").Return(mrw)
 	mc.On("WriteJSON", Anything, Anything).Return(nil)
 
-	ErrorHandler(func(c Context) error {
+	defaultErrorHandler(func(c Context) error {
 		return errors.New("hello, world")
 	})(mc)
 
@@ -193,23 +193,29 @@ func (*nopHandler) Handle(Context) error {
 	return nil
 }
 
-func TestShouldExecuteMiddlewaresInExactOrder(t *testing.T) {
-	items := make([]string, 0)
+func TestShouldExecuteMiddlewaresInReverseOrder(t *testing.T) {
+	// Reverse order means they will essentially execute in sequential order because
+	// each middleware executes the *next* item from within itself
+	items := make([]string, 0, 3)
 
 	r := NewRouter()
 
 	r.Use(func(next HandlerFunc) HandlerFunc {
 		return func(c Context) error {
-			err := next(c)
-			items = append(items, "first")
-			return err
+			items = append(items, "third")
+			return next(c)
+		}
+	}, func(next HandlerFunc) HandlerFunc {
+		return func(c Context) error {
+			items = append(items, "second")
+			return next(c)
 		}
 	})
+
 	r.Use(func(next HandlerFunc) HandlerFunc {
 		return func(c Context) error {
-			err := next(c)
-			items = append(items, "second")
-			return err
+			items = append(items, "first")
+			return next(c)
 		}
 	})
 
@@ -228,7 +234,7 @@ func TestShouldExecuteMiddlewaresInExactOrder(t *testing.T) {
 	_, err := http.Get(server.URL)
 	require.NoError(t, err)
 
-	assert.Equal(t, []string{"first", "second"}, items)
+	assert.Equal(t, []string{"first", "second", "third"}, items)
 }
 
 func TestUseShouldPanicIfNilMiddleware(t *testing.T) {
@@ -373,6 +379,23 @@ func TestShouldErrorPostWhenNoContentType(t *testing.T) {
 	assert.Equal(t, http.StatusBadRequest, resp.StatusCode)
 }
 
+func TestErrorHandlerSetsStatusWhenHandlerErrors(t *testing.T) {
+	r := NewRouter()
+
+	mh := &MockHandler{}
+	mh.On("Handle", Anything).Return(ErrUnauthorized)
+
+	r.MethodFunc("GET", "/", mh.Handle)
+
+	req := httptest.NewRequest("GET", "/", nil)
+	w := httptest.NewRecorder()
+	c := NewContext(req, w, nil)
+	h := withMiddlewares(r.middlewares, mh.Handle)
+	h(c)
+
+	assert.Equal(t, http.StatusUnauthorized, c.Response().Status())
+}
+
 func TestErrorsPostWhenEmptyBody(t *testing.T) {
 	r := NewRouter()
 
@@ -399,14 +422,14 @@ func TestErrorsPostWhenEmptyBody(t *testing.T) {
 
 func TestCallsErrHandlerAsFirstMiddleware(t *testing.T) {
 	var errHandlerCalled bool
-	ErrorHandler = func(next HandlerFunc) HandlerFunc {
+
+	r := NewRouter()
+	r.ErrorHandler = func(next HandlerFunc) HandlerFunc {
 		return func(c Context) error {
 			errHandlerCalled = true
 			return next(c)
 		}
 	}
-
-	r := NewRouter()
 
 	r.Use(func(next HandlerFunc) HandlerFunc {
 		return func(c Context) error {
@@ -428,4 +451,48 @@ func TestCallsErrHandlerAsFirstMiddleware(t *testing.T) {
 
 	_, err := http.Get(server.URL + "/")
 	require.NoError(t, err)
+}
+
+func TestHandleWritesErrorsBeforeMiddleware(t *testing.T) {
+	called := make(chan string, 5)
+
+	r := NewRouter()
+	r.ErrorHandler = func(next HandlerFunc) HandlerFunc {
+		return func(c Context) error {
+			err := next(c)
+			called <- "ErrorHandler"
+			return err
+		}
+	}
+
+	r.Use(func(next HandlerFunc) HandlerFunc {
+		return func(c Context) error {
+			err := next(c)
+			called <- "Middleware"
+			// require.Equal(t, err, ErrForbidden)
+			// require.Equal(t, http.StatusForbidden, c.Response().Status())
+			return err
+		}
+	})
+
+	mh := &MockHandler{}
+	mh.On("Handle", Anything).Run(func(Arguments) {
+		called <- "Handler"
+	}).Return(ErrForbidden)
+
+	req := httptest.NewRequest("GET", "/", nil)
+	w := httptest.NewRecorder()
+	c := NewContext(req, w, nil)
+
+	wrapped := withMiddlewares(r.middlewares, mh.Handle)
+	err := wrapped(c)
+	w.Flush()
+	require.IsType(t, &httpError{}, err)
+
+	close(called)
+
+	assert.Equal(t, "Handler", <-called)
+	assert.Equal(t, "ErrorHandler", <-called)
+	assert.Equal(t, "Middleware", <-called)
+	// mh.AssertCalled(t, "Handle", Anything)
 }
