@@ -53,12 +53,11 @@ var defaultErrorHandler Middleware = func(next HandlerFunc) HandlerFunc {
 // NewRouterWithBase allows you to create a new http router with the provided
 //  httprouter.Router instead of the default httprouter.New()
 func NewRouterWithBase(r *httprouter.Router) *Router {
-	rtr := &Router{
+	return &Router{
 		base:         r,
 		ErrorHandler: defaultErrorHandler,
+		middlewares:  make([]Middleware, 0),
 	}
-	rtr.middlewares = []Middleware{rtr.errorHandlerWrap}
-	return rtr
 }
 
 // NewRouter creates a new router for handling http requests
@@ -93,7 +92,7 @@ func (rtr *Router) Method(method string, path string, createHandler HandlerProvi
 		c := newContext(r, w, ps)
 		defer c.Response().Flush()
 
-		wrappedHandler := withMiddlewares(rtr.middlewares, requestParserMiddleware(createHandler))
+		wrappedHandler := rtr.withMiddlewares(requestParserMiddleware(createHandler))
 		wrappedHandler(c)
 	})
 }
@@ -159,6 +158,14 @@ func (rtr *Router) errorHandlerWrap(next HandlerFunc) HandlerFunc {
 	return rtr.ErrorHandler(next)
 }
 
+func (rtr *Router) withMiddlewares(next HandlerFunc) HandlerFunc {
+	fn := rtr.errorHandlerWrap(next)
+	for _, mw := range rtr.middlewares {
+		fn = rtr.errorHandlerWrap(mw(fn))
+	}
+	return fn
+}
+
 // Head is a handler that acceps HEAD requests
 func (rtr *Router) Head(path string, h HandlerProviderFunc) {
 	rtr.Method(http.MethodHead, path, h)
@@ -199,14 +206,6 @@ func (rtr *Router) Post(path string, h HandlerProviderFunc) {
 // Patch is a handler that accepts only PATCH requests
 func (rtr *Router) Patch(path string, h HandlerProviderFunc) {
 	rtr.Method(http.MethodPatch, path, h)
-}
-
-func withMiddlewares(mws []Middleware, next HandlerFunc) HandlerFunc {
-	fn := next
-	for _, mw := range mws {
-		fn = mw(fn)
-	}
-	return fn
 }
 
 type simpleHandler struct {

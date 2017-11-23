@@ -228,11 +228,8 @@ func TestShouldExecuteMiddlewaresInReverseOrder(t *testing.T) {
 		return mh, nil
 	})
 
-	server := httptest.NewServer(r)
-	defer server.Close()
-
-	_, err := http.Get(server.URL)
-	require.NoError(t, err)
+	rec := httptest.NewRecorder()
+	r.ServeHTTP(rec, httptest.NewRequest("GET", "/", nil))
 
 	assert.Equal(t, []string{"first", "second", "third"}, items)
 }
@@ -285,15 +282,9 @@ func TestShouldCreateMethodHandlers(t *testing.T) {
 			return mh, nil
 		})
 
-		// startup a test server with our new router
-		server := httptest.NewServer(r)
-		defer server.Close()
+		req := httptest.NewRequest(method, "/", nil)
 
-		req, err := http.NewRequest(method, server.URL+"/", nil)
-		require.NoError(t, err)
-
-		_, err = http.DefaultClient.Do(req)
-		require.NoError(t, err)
+		r.ServeHTTP(httptest.NewRecorder(), req)
 
 		mh.AssertCalled(t, "Handle", Anything)
 	}
@@ -390,7 +381,7 @@ func TestErrorHandlerSetsStatusWhenHandlerErrors(t *testing.T) {
 	req := httptest.NewRequest("GET", "/", nil)
 	w := httptest.NewRecorder()
 	c := NewContext(req, w, nil)
-	h := withMiddlewares(r.middlewares, mh.Handle)
+	h := r.withMiddlewares(mh.Handle)
 	h(c)
 
 	assert.Equal(t, http.StatusUnauthorized, c.Response().Status())
@@ -453,6 +444,35 @@ func TestCallsErrHandlerAsFirstMiddleware(t *testing.T) {
 	require.NoError(t, err)
 }
 
+func TestHandlesErrorsBetweenMiddlewares(t *testing.T) {
+	r := NewRouter()
+	herr := errors.New("asdf")
+
+	r.Use(func(next HandlerFunc) HandlerFunc {
+		return func(c Context) error {
+			err := next(c)
+			assert.IsType(t, (*httpError)(nil), err)
+			assert.Contains(t, err.Error(), herr.Error())
+			return herr
+		}
+	}, func(next HandlerFunc) HandlerFunc {
+		return func(c Context) error {
+			err := next(c)
+			assert.IsType(t, (*httpError)(nil), err)
+			assert.Contains(t, err.Error(), herr.Error())
+			return herr
+		}
+	})
+
+	r.MethodFunc("POST", "/", func(Context) error {
+		return herr
+	})
+
+	req := httptest.NewRequest("POST", "/", nil)
+	rec := httptest.NewRecorder()
+	r.ServeHTTP(rec, req)
+}
+
 func TestHandleWritesErrorsBeforeMiddleware(t *testing.T) {
 	called := make(chan string, 5)
 
@@ -484,7 +504,7 @@ func TestHandleWritesErrorsBeforeMiddleware(t *testing.T) {
 	w := httptest.NewRecorder()
 	c := NewContext(req, w, nil)
 
-	wrapped := withMiddlewares(r.middlewares, mh.Handle)
+	wrapped := r.withMiddlewares(mh.Handle)
 	err := wrapped(c)
 	w.Flush()
 	require.IsType(t, &httpError{}, err)
