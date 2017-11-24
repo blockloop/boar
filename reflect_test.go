@@ -88,6 +88,20 @@ func TestSetQueryShouldErrorWhenValidationError(t *testing.T) {
 	assert.Contains(t, err.Error(), "1234")
 }
 
+func TestSetURLParamsReturnsNoErrorWhenFieldsAreOkay(t *testing.T) {
+	var handler struct {
+		URLParams struct {
+			Age uint8
+		}
+	}
+
+	params := httprouter.Params{
+		{Key: "Age", Value: "40"},
+	}
+	err := setURLParams(reflect.Indirect(reflect.ValueOf(&handler)), params)
+	assert.NoError(t, err)
+}
+
 func TestSetURLParamsShouldReturnNoErrorWhenFieldDoesNotExist(t *testing.T) {
 	var handler struct{}
 	err := setURLParams(reflect.Indirect(reflect.ValueOf(&handler)), nil)
