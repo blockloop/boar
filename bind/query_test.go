@@ -193,7 +193,7 @@ func TestParseErrorsTypeMismatchForMultipleQueryValues(t *testing.T) {
 	r := httptest.NewRequest(http.MethodGet, "/?num=1&num=2", nil)
 	err := Query(&QueryParams, r.URL.Query())
 	require.IsType(t, &TypeMismatchError{}, err)
-	assert.Equal(t, err.(*TypeMismatchError).cause, errMultiValueSimpleField)
+	assert.Equal(t, err.(*TypeMismatchError).Cause, errMultiValueSimpleField)
 }
 
 func TestParseErrorsTypeMismatchForBadSimpleValues(t *testing.T) {

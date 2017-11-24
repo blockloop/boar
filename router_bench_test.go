@@ -38,11 +38,13 @@ func BenchmarkBoarHandlerWithBody(b *testing.B) {
 		"Age": 100,
 		"Charges": [19.99, 20.99, 103.12]
 	}`
-	server := httptest.NewServer(rtr.RealRouter())
-	defer server.Close()
 
 	for i := 0; i < b.N; i++ {
-		resp, _ := http.Post("/", contentTypeJSON, bytes.NewBufferString(rawReq))
+		rec := httptest.NewRecorder()
+		req := httptest.NewRequest(http.MethodPost, "/", bytes.NewBufferString(rawReq))
+		rtr.ServeHTTP(rec, req)
+		resp := rec.Result()
+
 		if resp.Body != nil {
 			resp.Body.Close()
 		}
@@ -50,7 +52,7 @@ func BenchmarkBoarHandlerWithBody(b *testing.B) {
 }
 
 func BenchmarkHTTPHandlerBaseWithBody(b *testing.B) {
-	handler := func(w http.ResponseWriter, r *http.Request) {
+	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		var body struct {
 			Name    string
 			Age     int
@@ -60,7 +62,7 @@ func BenchmarkHTTPHandlerBaseWithBody(b *testing.B) {
 			b.Fatalf("could not decode body: %+v", err)
 		}
 		w.WriteHeader(http.StatusOK)
-	}
+	})
 
 	rawReq := `{
 		"Name": "Brett",
@@ -71,7 +73,7 @@ func BenchmarkHTTPHandlerBaseWithBody(b *testing.B) {
 	for i := 0; i < b.N; i++ {
 		r := httptest.NewRequest("POST", "/", bytes.NewBufferString(rawReq))
 		w := httptest.NewRecorder()
-		handler(w, r)
+		handler.ServeHTTP(w, r)
 	}
 }
 
@@ -91,10 +93,10 @@ type benchBodyQueryHandler struct {
 func (h *benchBodyQueryHandler) Handle(c Context) error { return h.handler(c) }
 
 func BenchmarkBoarHandlerWithBodyAndQuery(b *testing.B) {
-
-	handler := &benchBodyHandler{}
-	handler.handler = func(c Context) error {
-		return nil
+	handler := &benchBodyHandler{
+		handler: func(c Context) error {
+			return nil
+		},
 	}
 
 	rtr := NewRouter()
@@ -109,7 +111,12 @@ func BenchmarkBoarHandlerWithBodyAndQuery(b *testing.B) {
 	}`
 
 	for i := 0; i < b.N; i++ {
-		resp, _ := http.Post("/?Page=1&PerPage=100", contentTypeJSON, bytes.NewBufferString(rawReq))
+		req := httptest.NewRequest(http.MethodPost, "/?Page=1&PerPage=100", bytes.NewBufferString(rawReq))
+		req.Header.Set("content-type", contentTypeJSON)
+		rec := httptest.NewRecorder()
+		rtr.ServeHTTP(rec, req)
+		resp := rec.Result()
+
 		if resp.Body != nil {
 			resp.Body.Close()
 		}

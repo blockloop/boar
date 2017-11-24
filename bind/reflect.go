@@ -36,10 +36,10 @@ func setSimpleField(f reflect.Value, fieldName string, kind reflect.Kind, val st
 		v, err := strconv.ParseBool(val)
 		if err != nil {
 			return &TypeMismatchError{
-				kind:      kind,
-				val:       val,
-				cause:     err,
-				fieldName: fieldName,
+				Kind:      kind,
+				Val:       val,
+				Cause:     err,
+				FieldName: fieldName,
 			}
 		}
 		f.SetBool(v)
@@ -48,10 +48,10 @@ func setSimpleField(f reflect.Value, fieldName string, kind reflect.Kind, val st
 		v, err := strconv.ParseInt(val, 10, 64)
 		if err != nil || f.OverflowInt(v) {
 			return &TypeMismatchError{
-				kind:      kind,
-				val:       val,
-				cause:     err,
-				fieldName: fieldName,
+				Kind:      kind,
+				Val:       val,
+				Cause:     err,
+				FieldName: fieldName,
 			}
 		}
 		f.SetInt(v)
@@ -60,10 +60,10 @@ func setSimpleField(f reflect.Value, fieldName string, kind reflect.Kind, val st
 		v, err := strconv.ParseUint(val, 10, 64)
 		if err != nil || f.OverflowUint(v) {
 			return &TypeMismatchError{
-				kind:      kind,
-				val:       val,
-				cause:     err,
-				fieldName: fieldName,
+				Kind:      kind,
+				Val:       val,
+				Cause:     err,
+				FieldName: fieldName,
 			}
 		}
 		f.SetUint(v)
@@ -72,10 +72,10 @@ func setSimpleField(f reflect.Value, fieldName string, kind reflect.Kind, val st
 		v, err := strconv.ParseFloat(val, 64)
 		if err != nil || f.OverflowFloat(v) {
 			return &TypeMismatchError{
-				kind:      kind,
-				val:       val,
-				cause:     err,
-				fieldName: fieldName,
+				Kind:      kind,
+				Val:       val,
+				Cause:     err,
+				FieldName: fieldName,
 			}
 		}
 		f.SetFloat(v)
@@ -92,12 +92,12 @@ var _ error = (*TypeMismatchError)(nil)
 // TypeMismatchError is an error that is caused by attempting to bind a type
 // to a field with a different type.
 type TypeMismatchError struct {
-	kind      reflect.Kind
-	val       interface{}
-	cause     error
-	fieldName string
+	Kind      reflect.Kind
+	Val       interface{}
+	Cause     error
+	FieldName string
 }
 
 func (e TypeMismatchError) Error() string {
-	return fmt.Sprintf("%s' is not a valid %s for %s: %s", e.val, e.kind, e.fieldName, e.cause)
+	return fmt.Sprintf("value(%s) is not a valid %s for %s", e.Val, e.Kind, e.FieldName)
 }

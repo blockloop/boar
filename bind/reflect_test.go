@@ -139,17 +139,16 @@ func TestTypeMismatchErrors(t *testing.T) {
 	}
 }
 
-func TestTypeMismatchErrorShouldExplain(t *testing.T) {
+func TestTypeMismatchErrorErrorFuncPrintsFields(t *testing.T) {
 	tme := &TypeMismatchError{
-		cause:     io.ErrClosedPipe,
-		fieldName: "asdfaksjdfh",
-		kind:      reflect.Int,
-		val:       "klasdhjf",
+		Cause:     io.ErrClosedPipe,
+		FieldName: "someField",
+		Kind:      reflect.Int,
+		Val:       "klasdhjf",
 	}
 
 	str := tme.Error()
-	assert.Contains(t, str, tme.cause.Error())
-	assert.Contains(t, str, tme.fieldName)
-	assert.Contains(t, str, tme.kind.String())
-	assert.Contains(t, str, tme.val)
+	assert.Contains(t, str, tme.FieldName)
+	assert.Contains(t, str, tme.Kind.String())
+	assert.Contains(t, str, tme.Val)
 }

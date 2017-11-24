@@ -21,6 +21,9 @@ coverage.html: cover
 coverage.bind.html: cover
 	@go tool cover -html=./bind/.coverprofile -o $@
 
+bench:
+	@go test -bench=. -benchtime=5s ./
+
 mocks:
 	-@rm mock_*.go 2> /dev/null
 	@mockery -case=underscore -all -recursive=false -inpkg

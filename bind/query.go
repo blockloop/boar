@@ -63,10 +63,10 @@ func QueryValue(obj reflect.Value, q url.Values) error {
 		// simple fields cannot have multiple values
 		if len(vals) > 1 {
 			return &TypeMismatchError{
-				cause:     errMultiValueSimpleField,
-				fieldName: tField.Name,
-				kind:      kind,
-				val:       vals,
+				Cause:     errMultiValueSimpleField,
+				FieldName: tField.Name,
+				Kind:      kind,
+				Val:       vals,
 			}
 		}
 
