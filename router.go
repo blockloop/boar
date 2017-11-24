@@ -50,6 +50,26 @@ var defaultErrorHandler Middleware = func(next HandlerFunc) HandlerFunc {
 	}
 }
 
+// PanicMiddleware recovers from panics happening in http handlers and returns the error
+// to be received by the normal middleware chain
+var PanicMiddleware Middleware = func(next HandlerFunc) HandlerFunc {
+	return func(c Context) (err error) {
+		defer func() {
+			r := recover()
+			if r == nil {
+				return
+			}
+			var ok bool
+			err, ok = r.(error)
+			if !ok {
+				err = fmt.Errorf("%s", r)
+			}
+		}()
+		err = next(c)
+		return
+	}
+}
+
 // NewRouterWithBase allows you to create a new http router with the provided
 //  httprouter.Router instead of the default httprouter.New()
 func NewRouterWithBase(r *httprouter.Router) *Router {
@@ -62,7 +82,15 @@ func NewRouterWithBase(r *httprouter.Router) *Router {
 
 // NewRouter creates a new router for handling http requests
 func NewRouter() *Router {
-	return NewRouterWithBase(httprouter.New())
+	r := httprouter.New()
+	r.NotFound = func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusNotFound)
+	}
+	r.MethodNotAllowed = func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusMethodNotAllowed)
+	}
+
+	return NewRouterWithBase(r)
 }
 
 // Router is an http router

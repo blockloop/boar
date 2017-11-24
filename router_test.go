@@ -3,10 +3,12 @@ package boar
 import (
 	"bytes"
 	"errors"
+	"fmt"
 	"io/ioutil"
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync"
 	"testing"
 
 	"github.com/julienschmidt/httprouter"
@@ -263,13 +265,8 @@ func TestShouldExecuteMiddlewaresInReverseOrder(t *testing.T) {
 		}
 	})
 
-	mh := &MockHandler{}
-	mh.On("Handle", Anything).Run(func(args Arguments) {
-		args.Get(0).(Context).WriteStatus(http.StatusOK)
-	}).Return(nil)
-
-	r.Get("/", func(Context) (Handler, error) {
-		return mh, nil
+	r.MethodFunc(http.MethodGet, "/", func(c Context) error {
+		return c.WriteStatus(200)
 	})
 
 	rec := httptest.NewRecorder()
@@ -340,7 +337,7 @@ func TestSimpleHandlerShouldWork(t *testing.T) {
 	handler := &MockHandler{}
 	handler.On("Handle", Anything).Return(nil)
 
-	r.MethodFunc("GET", "/", handler.Handle)
+	r.MethodFunc(http.MethodGet, "/", handler.Handle)
 
 	r.ServeHTTP(httptest.NewRecorder(), httptest.NewRequest("GET", "/", nil))
 	handler.AssertCalled(t, "Handle", Anything)
@@ -395,16 +392,12 @@ func TestShouldErrorPostWhenNoContentType(t *testing.T) {
 
 func TestErrorHandlerSetsStatusWhenHandlerErrors(t *testing.T) {
 	r := NewRouter()
-
-	mh := &MockHandler{}
-	mh.On("Handle", Anything).Return(ErrUnauthorized)
-
-	r.MethodFunc("GET", "/", mh.Handle)
-
 	req := httptest.NewRequest("GET", "/", nil)
 	w := httptest.NewRecorder()
 	c := NewContext(req, w, nil)
-	h := r.withMiddlewares(mh.Handle)
+	h := r.withMiddlewares(func(Context) error {
+		return ErrUnauthorized
+	})
 	h(c)
 
 	assert.Equal(t, http.StatusUnauthorized, c.Response().Status())
@@ -507,5 +500,143 @@ func TestHandleWritesErrorsBeforeMiddleware(t *testing.T) {
 	assert.Equal(t, "Handler", <-called)
 	assert.Equal(t, "ErrorHandler", <-called)
 	assert.Equal(t, "Middleware", <-called)
-	// mh.AssertCalled(t, "Handle", Anything)
+}
+
+func TestPanicHandlerSets500StatusCode(t *testing.T) {
+	r := NewRouter()
+	r.Use(PanicMiddleware)
+
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/", nil)
+	err := fmt.Errorf("something broke")
+
+	r.MethodFunc(http.MethodGet, "/", func(Context) error {
+		panic(err)
+	})
+
+	r.ServeHTTP(rec, req)
+	rec.Flush()
+
+	resp := rec.Result()
+
+	assert.Equal(t, http.StatusInternalServerError, resp.StatusCode)
+}
+
+func TestPanicHandlerPreservesPanicMessage(t *testing.T) {
+	r := NewRouter()
+	r.Use(PanicMiddleware)
+
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/", nil)
+	err := fmt.Errorf("something broke")
+
+	r.MethodFunc(http.MethodGet, "/", func(Context) error {
+		panic(err)
+	})
+
+	r.ServeHTTP(rec, req)
+	rec.Flush()
+
+	resp := rec.Result()
+
+	body, rerr := ioutil.ReadAll(resp.Body)
+	require.NoError(t, rerr)
+
+	assert.Contains(t, string(body), err.Error())
+}
+
+func TestPanicHandlerPreservesErrorWhenNoPanic(t *testing.T) {
+	r := NewRouter()
+	r.Use(PanicMiddleware)
+
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/", nil)
+
+	r.MethodFunc(http.MethodGet, "/", func(Context) error {
+		return ErrForbidden
+	})
+
+	r.ServeHTTP(rec, req)
+	rec.Flush()
+
+	resp := rec.Result()
+
+	assert.Equal(t, http.StatusForbidden, resp.StatusCode)
+}
+
+func TestPanicHandlerConvertsPanicStringsToHTTPError(t *testing.T) {
+	r := NewRouter()
+	r.Use(PanicMiddleware)
+
+	done := &sync.WaitGroup{}
+	done.Add(1)
+
+	r.Use(func(next HandlerFunc) HandlerFunc {
+		return func(c Context) error {
+			defer done.Done()
+			err := next(c)
+			assert.Implements(t, (*HTTPError)(nil), err)
+			assert.Contains(t, err.Error(), "something broke")
+			return err
+		}
+	})
+
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/", nil)
+
+	r.MethodFunc(http.MethodGet, "/", func(Context) error {
+		panic("something broke")
+	})
+
+	r.ServeHTTP(rec, req)
+	done.Wait()
+	rec.Flush()
+}
+
+func TestNotFoundHandlerDoesNotPrintBody(t *testing.T) {
+	r := NewRouter()
+	r.Use(PanicMiddleware)
+
+	done := &sync.WaitGroup{}
+	done.Add(1)
+
+	r.MethodFunc(http.MethodGet, "/hello", func(Context) error {
+		return nil
+	})
+
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/", nil)
+
+	r.ServeHTTP(rec, req)
+	rec.Flush()
+	resp := rec.Result()
+
+	body, err := ioutil.ReadAll(resp.Body)
+	require.NoError(t, err)
+
+	assert.Empty(t, body)
+}
+
+func TestMethodNodAllowedHandlerDoesNotPrintBody(t *testing.T) {
+	r := NewRouter()
+	r.Use(PanicMiddleware)
+
+	done := &sync.WaitGroup{}
+	done.Add(1)
+
+	r.MethodFunc(http.MethodGet, "/", func(Context) error {
+		return nil
+	})
+
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/", nil)
+
+	r.ServeHTTP(rec, req)
+	rec.Flush()
+	resp := rec.Result()
+
+	body, err := ioutil.ReadAll(resp.Body)
+	require.NoError(t, err)
+
+	assert.Empty(t, body)
 }
