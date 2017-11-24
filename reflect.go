@@ -79,12 +79,12 @@ func setURLParams(handler reflect.Value, params httprouter.Params) error {
 		}
 	}
 	if err := bind.ParamsValue(field, params); err != nil {
-		return NewHTTPError(http.StatusNotFound, err)
+		if tme, ok := err.(*bind.TypeMismatchError); ok {
+			return NewValidationError(urlParamsField, tme)
+		}
+		return err
 	}
-	if err := validate(urlParamsField, field.Addr().Interface()); err != nil {
-		return NewHTTPError(http.StatusNotFound, err)
-	}
-	return nil
+	return validate(urlParamsField, field.Addr().Interface())
 }
 
 func setBody(handler reflect.Value, c Context) error {

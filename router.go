@@ -116,6 +116,9 @@ func requestParserMiddleware(createHandler HandlerProviderFunc) HandlerFunc {
 		}
 
 		if err := setURLParams(handlerValue, c.URLParams()); err != nil {
+			if _, ok := err.(*ValidationError); ok {
+				return ErrNotFound
+			}
 			return err
 		}
 

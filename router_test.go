@@ -6,6 +6,7 @@ import (
 	"io/ioutil"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"github.com/julienschmidt/httprouter"
@@ -175,6 +176,26 @@ func TestRequestParserMiddlewareReturns404WhenSetURLParamsFailsValidation(t *tes
 	rec.Flush()
 
 	assert.Equal(t, http.StatusNotFound, rec.Result().StatusCode)
+}
+
+func TestRequestParserMiddlewareDoesNotPrintErrorWhenValidationError(t *testing.T) {
+	r := NewRouter()
+	r.Get("/users/:id", func(Context) (Handler, error) {
+		return &urlParamsHandler{}, nil
+	})
+
+	req := httptest.NewRequest("GET", "/users/1", nil)
+	rec := httptest.NewRecorder()
+	r.ServeHTTP(rec, req)
+	rec.Flush()
+	resp := rec.Result()
+
+	b, err := ioutil.ReadAll(resp.Body)
+	require.NoError(t, err)
+	body := strings.ToLower(string(b))
+
+	assert.NotContains(t, body, "age")
+	assert.Contains(t, body, "not found")
 }
 
 type bodyHandler struct {

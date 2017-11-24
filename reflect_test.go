@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -136,6 +137,33 @@ func TestSetURLParamsShouldReturnValidationErrorWhenBinderFails(t *testing.T) {
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), key)
 	assert.Contains(t, err.Error(), badValue)
+}
+
+func TestSetURLParamsReturnsValidationErrorWhenTypeMismatchErrorInBind(t *testing.T) {
+	var handler struct {
+		URLParams struct {
+			Age int
+		}
+	}
+	key, badValue := "Age", "abcd"
+	err := setURLParams(reflect.Indirect(reflect.ValueOf(&handler)), httprouter.Params{
+		{Key: key, Value: badValue},
+	})
+	assert.IsType(t, &ValidationError{}, err)
+}
+
+func TestSetURLParamsReturnsErrorWhenBadTypeForParameter(t *testing.T) {
+	var handler struct {
+		URLParams struct {
+			Age func()
+		}
+	}
+	key, badValue := "Age", "abcd"
+	err := setURLParams(reflect.Indirect(reflect.ValueOf(&handler)), httprouter.Params{
+		{Key: key, Value: badValue},
+	})
+	assert.Error(t, err)
+	assert.Contains(t, fmt.Sprint(err), "not a supported type")
 }
 
 func TestSetBodyShouldReturnNoErrorWhenFieldDoesNotExist(t *testing.T) {
