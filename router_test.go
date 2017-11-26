@@ -5,8 +5,10 @@ import (
 	"errors"
 	"fmt"
 	"io/ioutil"
+	"log"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"strings"
 	"sync"
 	"testing"
@@ -277,6 +279,8 @@ func TestShouldExecuteMiddlewaresInReverseOrder(t *testing.T) {
 
 func TestUseShouldPanicIfNilMiddleware(t *testing.T) {
 	r := NewRouter()
+	log.SetOutput(ioutil.Discard)
+	defer log.SetOutput(os.Stderr)
 	assert.Panics(t, func() {
 		r.Use(nil)
 	})

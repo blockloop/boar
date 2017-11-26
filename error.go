@@ -165,3 +165,42 @@ func (e *ValidationError) MarshalJSON() ([]byte, error) {
 		},
 	})
 }
+
+var _ HTTPError = (*PanicError)(nil)
+
+// PanicError is an error caused by panic that was recovered
+type PanicError struct {
+	cause error
+	Stack []byte
+}
+
+// NewPanicError creates a new PanicError with the callstack provided. You can get the
+// current callstack with debug.Stack()
+func NewPanicError(recovered interface{}, stack []byte) *PanicError {
+	err, ok := recovered.(error)
+	if !ok {
+		err = fmt.Errorf("%s", recovered)
+	}
+	return &PanicError{
+		cause: err,
+		Stack: stack,
+	}
+}
+
+func (p *PanicError) Status() int {
+	return http.StatusInternalServerError
+}
+
+func (p *PanicError) Cause() error {
+	return p.cause
+}
+
+func (p *PanicError) Error() string {
+	return fmt.Sprintf("%s\n%s", p.Cause(), string(p.Stack))
+}
+
+func (p *PanicError) MarshalJSON() ([]byte, error) {
+	return json.Marshal(JSON{
+		"error": p.Cause().Error(),
+	})
+}

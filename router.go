@@ -5,6 +5,7 @@ import (
 	"log"
 	"net/http"
 	"reflect"
+	"runtime/debug"
 
 	"github.com/julienschmidt/httprouter"
 )
@@ -55,14 +56,8 @@ var defaultErrorHandler Middleware = func(next HandlerFunc) HandlerFunc {
 var PanicMiddleware Middleware = func(next HandlerFunc) HandlerFunc {
 	return func(c Context) (err error) {
 		defer func() {
-			r := recover()
-			if r == nil {
-				return
-			}
-			var ok bool
-			err, ok = r.(error)
-			if !ok {
-				err = fmt.Errorf("%s", r)
+			if r := recover(); r != nil {
+				err = NewPanicError(r, debug.Stack())
 			}
 		}()
 		err = next(c)
