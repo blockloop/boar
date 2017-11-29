@@ -11,6 +11,7 @@ import (
 	"os"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 
 	"github.com/julienschmidt/httprouter"
@@ -21,10 +22,7 @@ import (
 
 func TestDefaultErrorHandlerShouldDoNothingToForNilError(t *testing.T) {
 	mc := &MockContext{}
-	defaultErrorHandler(func(c Context) error {
-		return nil
-	})(mc)
-	mc.AssertNotCalled(t, "WriteJSON")
+	defaultErrorHandler(mc, nil)
 }
 
 func TestDefaultErrorHandlerWritesExistingHTTPErrorIfNotAlreadyWritten(t *testing.T) {
@@ -41,12 +39,12 @@ func TestDefaultErrorHandlerWritesExistingHTTPErrorIfNotAlreadyWritten(t *testin
 		assert.Equal(t, err, args.Get(1))
 	})
 
-	defaultErrorHandler(func(c Context) error {
-		return err
-	})(mc)
+	defaultErrorHandler(mc, err)
+	mr.AssertExpectations(t)
+	mc.AssertExpectations(t)
 }
 
-func TestDefaultErrorHandlerReturnsWriteErrIfWriteJSONFails(t *testing.T) {
+func TestDefaultErrorHandlerPrintsErrIfWriteJSONFails(t *testing.T) {
 	mc := &MockContext{}
 	status := 400
 	err := NewHTTPErrorStatus(status)
@@ -59,27 +57,14 @@ func TestDefaultErrorHandlerReturnsWriteErrIfWriteJSONFails(t *testing.T) {
 	mr.On("Len").Return(0)
 	mc.On("Response").Return(mr)
 
-	actual := defaultErrorHandler(func(c Context) error {
-		return err
-	})(mc)
+	buf := bytes.NewBufferString("")
+	log.SetOutput(buf)
+	defer log.SetOutput(os.Stderr)
 
-	assert.Contains(t, actual.Error(), writeErr.Error())
-}
+	defaultErrorHandler(mc, err)
+	log.SetOutput(os.Stderr)
 
-func TestDefaultErrorHandlerMakesNonHTTPErrorsIntoHTTPErrors(t *testing.T) {
-	err := errors.New("something went wrong")
-	mr := &MockResponseWriter{}
-	mr.On("Len").Return(0)
-
-	mc := &MockContext{}
-	mc.On("Response").Return(mr)
-	mc.On("WriteJSON", Anything, Anything).Return(nil)
-
-	actual := defaultErrorHandler(func(c Context) error {
-		return err
-	})(mc)
-
-	assert.IsType(t, &httpError{}, actual)
+	assert.Contains(t, string(buf.Bytes()), writeErr.Error())
 }
 
 func TestDefaultErrorHandlerDoesNotWriteIfAlreadyWritten(t *testing.T) {
@@ -88,14 +73,11 @@ func TestDefaultErrorHandlerDoesNotWriteIfAlreadyWritten(t *testing.T) {
 
 	mc := &MockContext{}
 	mc.On("Response").Return(mrw)
-	mc.On("WriteJSON", Anything, Anything).Return(nil)
 
-	defaultErrorHandler(func(c Context) error {
-		return errors.New("hello, world")
-	})(mc)
+	defaultErrorHandler(mc, errors.New("hello, world"))
 
-	mrw.AssertCalled(t, "Len")
-	mc.AssertNotCalled(t, "WriteJSON", Anything)
+	mrw.AssertExpectations(t)
+	mc.AssertExpectations(t)
 }
 
 func TestRequestParserMiddlewarePanicsWhenNilHandler(t *testing.T) {
@@ -436,43 +418,42 @@ func TestErrorsPostWhenEmptyBody(t *testing.T) {
 
 func TestHandlesErrorsBetweenMiddlewares(t *testing.T) {
 	r := NewRouter()
-	herr := errors.New("asdf")
+
+	var calls int32
+
+	r.ErrorHandler = func(Context, error) {
+		atomic.AddInt32(&calls, 1)
+	}
 
 	r.Use(func(next HandlerFunc) HandlerFunc {
 		return func(c Context) error {
-			err := next(c)
-			assert.IsType(t, (*httpError)(nil), err)
-			assert.Contains(t, err.Error(), herr.Error())
-			return herr
+			return next(c)
 		}
-	}, func(next HandlerFunc) HandlerFunc {
+	})
+
+	r.Use(func(next HandlerFunc) HandlerFunc {
 		return func(c Context) error {
-			err := next(c)
-			assert.IsType(t, (*httpError)(nil), err)
-			assert.Contains(t, err.Error(), herr.Error())
-			return herr
+			return next(c)
 		}
 	})
 
 	r.MethodFunc("POST", "/", func(Context) error {
-		return herr
+		return errors.New("asdf")
 	})
 
 	req := httptest.NewRequest("POST", "/", nil)
 	rec := httptest.NewRecorder()
 	r.ServeHTTP(rec, req)
+
+	assert.EqualValues(t, 3, calls)
 }
 
-func TestHandleWritesErrorsBeforeMiddleware(t *testing.T) {
-	called := make(chan string, 5)
+func TestHandleCallsErrorHandlerBeforeMiddleware(t *testing.T) {
+	called := make(chan string, 10)
 
 	r := NewRouter()
-	r.ErrorHandler = func(next HandlerFunc) HandlerFunc {
-		return func(c Context) error {
-			err := next(c)
-			called <- "ErrorHandler"
-			return err
-		}
+	r.ErrorHandler = func(c Context, err error) {
+		called <- "ErrorHandler"
 	}
 
 	r.Use(func(next HandlerFunc) HandlerFunc {
@@ -495,15 +476,17 @@ func TestHandleWritesErrorsBeforeMiddleware(t *testing.T) {
 	c := NewContext(req, w, nil)
 
 	wrapped := r.withMiddlewares(mh.Handle)
-	err := wrapped(c)
+	wrapped(c)
+	c.Response().Flush()
 	w.Flush()
-	require.IsType(t, &httpError{}, err)
 
 	close(called)
+	names := make([]string, 0, 4)
+	for name := range called {
+		names = append(names, name)
+	}
 
-	assert.Equal(t, "Handler", <-called)
-	assert.Equal(t, "ErrorHandler", <-called)
-	assert.Equal(t, "Middleware", <-called)
+	assert.EqualValues(t, []string{"Handler", "ErrorHandler", "Middleware", "ErrorHandler"}, names)
 }
 
 func TestPanicHandlerSets500StatusCode(t *testing.T) {

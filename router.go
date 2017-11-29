@@ -1,7 +1,6 @@
 package boar
 
 import (
-	"fmt"
 	"log"
 	"net/http"
 	"reflect"
@@ -23,32 +22,32 @@ type HandlerFunc func(Context) error
 // this is valuable to use like a factory
 type HandlerProviderFunc func(Context) (Handler, error)
 
+// ErrorHandlerFunc is a func that handles errors returned by middlewares or handlers
+type ErrorHandlerFunc func(Context, error)
+
 // Handler is an http Handler
 type Handler interface {
 	Handle(Context) error
 }
 
-var defaultErrorHandler Middleware = func(next HandlerFunc) HandlerFunc {
-	return func(c Context) error {
-		err := next(c)
-		if err == nil {
-			return nil
-		}
-
-		httperr, ok := err.(HTTPError)
-		if !ok {
-			httperr = NewHTTPError(http.StatusInternalServerError, err)
-		}
-
-		if c.Response().Len() == 0 {
-			werr := c.WriteJSON(httperr.Status(), httperr)
-			if werr != nil {
-				return fmt.Errorf("unable to serialize JSON to response: %s", werr)
-			}
-		}
-
-		return httperr
+var defaultErrorHandler = func(c Context, err error) {
+	if err == nil {
+		return
 	}
+
+	httperr, ok := err.(HTTPError)
+	if !ok {
+		httperr = NewHTTPError(http.StatusInternalServerError, err)
+	}
+
+	if c.Response().Len() == 0 {
+		werr := c.WriteJSON(httperr.Status(), httperr)
+		if werr != nil {
+			log.Printf("ERROR: unable to serialize JSON to response: %s", werr)
+		}
+	}
+
+	return
 }
 
 // PanicMiddleware recovers from panics happening in http handlers and returns the error
@@ -95,7 +94,7 @@ type Router struct {
 	// ErrorHandler is a middleware that handles writing errors back to the client when an error
 	// an error occurs in the handler. It is the first middleware executed therefore It should
 	// always return the error that it handled
-	ErrorHandler Middleware
+	ErrorHandler ErrorHandlerFunc
 }
 
 // RealRouter returns the httprouter.Router used for actual serving
@@ -176,12 +175,16 @@ func (rtr *Router) Use(mw ...Middleware) {
 	rtr.middlewares = append(rtr.middlewares, mw...)
 }
 
-// errorHandlerWrap wrapps rtr.ErrorHandler. Because ErrorHandler is settable and users
-// can change the ErrorHandler var, this func is used as a wrapper to call whatever current
-// ErrorHandler is set at the time of execution. If ErrorHandler was simply added to Middlewares
-// at NewRouter then the func would be unchanagable.
+// errorHandlerWrap wrapps rtr.ErrorHandler in a middleware so that the error handler
+// will be executed with every middleware
 func (rtr *Router) errorHandlerWrap(next HandlerFunc) HandlerFunc {
-	return rtr.ErrorHandler(next)
+	return func(c Context) error {
+		err := next(c)
+		if err != nil {
+			rtr.ErrorHandler(c, err)
+		}
+		return err
+	}
 }
 
 func (rtr *Router) withMiddlewares(next HandlerFunc) HandlerFunc {
