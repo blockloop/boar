@@ -78,7 +78,7 @@ func TestSetQueryShouldErrorWithMismatchType(t *testing.T) {
 func TestSetQueryShouldErrorWhenValidationError(t *testing.T) {
 	var handler struct {
 		Query struct {
-			Name string `valid:"alpha"`
+			Name string `validate:"alpha"`
 		}
 	}
 	err := setQuery(reflect.Indirect(reflect.ValueOf(&handler)), url.Values{
@@ -86,7 +86,6 @@ func TestSetQueryShouldErrorWhenValidationError(t *testing.T) {
 	})
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "Name")
-	assert.Contains(t, err.Error(), "1234")
 }
 
 func TestSetURLParamsReturnsNoErrorWhenFieldsAreOkay(t *testing.T) {
@@ -112,7 +111,7 @@ func TestSetURLParamsShouldReturnNoErrorWhenFieldDoesNotExist(t *testing.T) {
 func TestSetURLParamsShouldReturnValidationErrorWhenValidationFails(t *testing.T) {
 	var handler struct {
 		URLParams struct {
-			Name string `valid:"alpha"`
+			Name string `validate:"alpha"`
 		}
 	}
 	key, badValue := "Name", "1234"
@@ -121,7 +120,6 @@ func TestSetURLParamsShouldReturnValidationErrorWhenValidationFails(t *testing.T
 	})
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), key)
-	assert.Contains(t, err.Error(), badValue)
 }
 
 func TestSetURLParamsShouldReturnValidationErrorWhenBinderFails(t *testing.T) {
@@ -136,7 +134,6 @@ func TestSetURLParamsShouldReturnValidationErrorWhenBinderFails(t *testing.T) {
 	})
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), key)
-	assert.Contains(t, err.Error(), badValue)
 }
 
 func TestSetURLParamsReturnsValidationErrorWhenTypeMismatchErrorInBind(t *testing.T) {
@@ -209,7 +206,7 @@ func TestSetBodyShouldReturnValidationErrorWhenReadJSONFails(t *testing.T) {
 func TestSetBodyShouldReturnValidationErrorWhenValidationFails(t *testing.T) {
 	var handler struct {
 		Body struct {
-			Name string `valid:"alpha"`
+			Name string `validate:"alpha"`
 		}
 	}
 

@@ -11,7 +11,6 @@ Boar is only possible because of the many frameworks and ideas that have inspire
 
 Other thanks to
 
-- [govalidator](https://github.com/asaskevich/govalidator) (used in Boar)
 - [httprouter](https://github.com/julienschmidt/httprouter) (used in Boar)
 - [Gin](https://github.com/gin-gonic/gin) (inspiration)
 

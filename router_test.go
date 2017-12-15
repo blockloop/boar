@@ -144,7 +144,7 @@ func TestRequestParserMiddlewareReturnsErrorWhenSetURLParamsFails(t *testing.T) 
 type urlParamsHandler struct {
 	handle    HandlerFunc
 	URLParams struct {
-		Age int `valid:"required"`
+		Age int `validate:"required"`
 	}
 }
 
@@ -153,10 +153,13 @@ func (h *urlParamsHandler) Handle(c Context) error { return h.handle(c) }
 func TestRequestParserMiddlewareReturns404WhenSetURLParamsFailsValidation(t *testing.T) {
 	r := NewRouter()
 	r.Get("/users/:id", func(Context) (Handler, error) {
-		return &urlParamsHandler{}, nil
+		return &urlParamsHandler{handle: func(Context) error {
+			t.Fatal("handle called unexpectedly")
+			return nil
+		}}, nil
 	})
 
-	req := httptest.NewRequest("GET", "/users/1", nil)
+	req := httptest.NewRequest("GET", "/users/abcd", nil)
 	rec := httptest.NewRecorder()
 	r.ServeHTTP(rec, req)
 	rec.Flush()
@@ -167,7 +170,10 @@ func TestRequestParserMiddlewareReturns404WhenSetURLParamsFailsValidation(t *tes
 func TestRequestParserMiddlewareDoesNotPrintErrorWhenValidationError(t *testing.T) {
 	r := NewRouter()
 	r.Get("/users/:id", func(Context) (Handler, error) {
-		return &urlParamsHandler{}, nil
+		return &urlParamsHandler{handle: func(Context) error {
+			t.Fatal("handle called unexpectedly")
+			return nil
+		}}, nil
 	})
 
 	req := httptest.NewRequest("GET", "/users/1", nil)
@@ -187,7 +193,7 @@ func TestRequestParserMiddlewareDoesNotPrintErrorWhenValidationError(t *testing.
 type bodyHandler struct {
 	handle HandlerFunc
 	Body   struct {
-		Age int `valid:"required"`
+		Age int `validate:"required"`
 	}
 }
 

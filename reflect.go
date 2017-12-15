@@ -8,9 +8,9 @@ import (
 	"reflect"
 	"strings"
 
-	"github.com/asaskevich/govalidator"
 	"github.com/blockloop/boar/bind"
 	"github.com/julienschmidt/httprouter"
+	"gopkg.in/go-playground/validator.v9"
 )
 
 const (
@@ -31,6 +31,8 @@ var (
 	contentTypeJSON          = "application/json"
 	contentTypeFormEncoded   = "application/x-www-form-urlencoded"
 	contentTypeMultipartForm = "multipart/form-data"
+
+	validateImpl = validator.New()
 )
 
 func checkField(field reflect.Value) (bool, error) {
@@ -131,14 +133,10 @@ func getBinder(c Context) (binderFunc, error) {
 }
 
 func validate(fieldName string, v interface{}) error {
-	valid, err := govalidator.ValidateStruct(v)
-	if valid {
-		return nil
+	if err := validateImpl.Struct(v); err != nil {
+		return NewValidationErrors(fieldName, []error{err})
 	}
-	if verr, ok := err.(govalidator.Errors); ok {
-		return NewValidationErrors(fieldName, verr.Errors())
-	}
-	return NewValidationErrors(fieldName, []error{err})
+	return nil
 }
 
 type badFieldError struct {
