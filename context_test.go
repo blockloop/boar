@@ -7,9 +7,9 @@ import (
 	"net/http/httptest"
 	"testing"
 
+	gomock "github.com/golang/mock/gomock"
 	"github.com/julienschmidt/httprouter"
 	"github.com/stretchr/testify/assert"
-	. "github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 )
 
@@ -21,11 +21,13 @@ func TestWriteJSONSetsContentType(t *testing.T) {
 }
 
 func TestWriteJSONReturnsErrorWhenJSONEncodeFails(t *testing.T) {
-	w := &MockResponseWriter{}
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+	w := NewMockResponseWriter(ctrl)
 	expected := io.ErrClosedPipe
-	w.On("Write", Anything).Return(0, expected)
-	w.On("Header", Anything).Return(http.Header{})
-	w.On("WriteHeader", Anything).Return(0)
+	w.EXPECT().Write(gomock.Any()).Return(0, expected)
+	w.EXPECT().Header().Return(http.Header{})
+	w.EXPECT().WriteHeader(gomock.Any())
 
 	c := newContext(nil, nil, nil)
 	c.response = w
@@ -35,10 +37,12 @@ func TestWriteJSONReturnsErrorWhenJSONEncodeFails(t *testing.T) {
 }
 
 func TestWriteJSONDoesNotReturnErrorWhenJSONEncodePasses(t *testing.T) {
-	w := &MockResponseWriter{}
-	w.On("Write", Anything).Return(0, nil)
-	w.On("Header", Anything).Return(http.Header{})
-	w.On("WriteHeader", Anything).Return(0)
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+	w := NewMockResponseWriter(ctrl)
+	w.EXPECT().Write(gomock.Any()).Return(0, nil)
+	w.EXPECT().Header().Return(http.Header{})
+	w.EXPECT().WriteHeader(gomock.Any())
 
 	c := newContext(nil, nil, nil)
 	c.response = w

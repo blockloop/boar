@@ -14,48 +14,51 @@ import (
 	"sync/atomic"
 	"testing"
 
+	gomock "github.com/golang/mock/gomock"
 	"github.com/julienschmidt/httprouter"
 	"github.com/stretchr/testify/assert"
-	. "github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 )
 
 func TestDefaultErrorHandlerShouldDoNothingToForNilError(t *testing.T) {
-	mc := &MockContext{}
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+	mc := NewMockContext(ctrl)
 	defaultErrorHandler(mc, nil)
 }
 
 func TestDefaultErrorHandlerWritesExistingHTTPErrorIfNotAlreadyWritten(t *testing.T) {
-	mr := &MockResponseWriter{}
-	mr.On("Len").Return(0)
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+	mr := NewMockResponseWriter(ctrl)
+	mr.EXPECT().Len().Return(0)
 
-	mc := &MockContext{}
-	mc.On("Response").Return(mr)
+	mc := NewMockContext(ctrl)
+	mc.EXPECT().Response().Return(mr)
 
 	status := http.StatusBadRequest
 	err := NewHTTPErrorStatus(status)
-	mc.On("WriteJSON", Anything, Anything).Return(nil).Run(func(args Arguments) {
-		assert.Equal(t, status, args.Get(0))
-		assert.Equal(t, err, args.Get(1))
+	mc.EXPECT().WriteJSON(gomock.Any(), gomock.Any()).Return(nil).Do(func(st int, er error) {
+		assert.Equal(t, status, st)
+		assert.Equal(t, err, er)
 	})
 
 	defaultErrorHandler(mc, err)
-	mr.AssertExpectations(t)
-	mc.AssertExpectations(t)
 }
 
 func TestDefaultErrorHandlerPrintsErrIfWriteJSONFails(t *testing.T) {
-	mc := &MockContext{}
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+	mc := NewMockContext(ctrl)
 	status := 400
 	err := NewHTTPErrorStatus(status)
 	writeErr := errors.New("something went wrong")
 
-	mc.On("WriteJSON", Anything, Anything).Return(writeErr)
+	mc.EXPECT().WriteJSON(gomock.Any(), gomock.Any()).Return(writeErr)
 
-	mr := &MockResponseWriter{}
-	mr.On("Flush").Return(nil)
-	mr.On("Len").Return(0)
-	mc.On("Response").Return(mr)
+	mr := NewMockResponseWriter(ctrl)
+	mr.EXPECT().Len().Return(0)
+	mc.EXPECT().Response().Return(mr)
 
 	buf := bytes.NewBufferString("")
 	log.SetOutput(buf)
@@ -68,16 +71,16 @@ func TestDefaultErrorHandlerPrintsErrIfWriteJSONFails(t *testing.T) {
 }
 
 func TestDefaultErrorHandlerDoesNotWriteIfAlreadyWritten(t *testing.T) {
-	mrw := &MockResponseWriter{}
-	mrw.On("Len").Return(1)
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
 
-	mc := &MockContext{}
-	mc.On("Response").Return(mrw)
+	mrw := NewMockResponseWriter(ctrl)
+	mrw.EXPECT().Len().Return(1)
+
+	mc := NewMockContext(ctrl)
+	mc.EXPECT().Response().Return(mrw)
 
 	defaultErrorHandler(mc, errors.New("hello, world"))
-
-	mrw.AssertExpectations(t)
-	mc.AssertExpectations(t)
 }
 
 func TestRequestParserMiddlewarePanicsWhenNilHandler(t *testing.T) {
@@ -113,8 +116,10 @@ func TestRequestParserMiddlewareReturnsErrorWhenSetQueryFails(t *testing.T) {
 
 	req := httptest.NewRequest("GET", "/?hello=world", nil)
 
-	mc := &MockContext{}
-	mc.On("Request").Return(req)
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+	mc := NewMockContext(ctrl)
+	mc.EXPECT().Request().Return(req)
 
 	err := handle(mc)
 	assert.Error(t, err)
@@ -133,9 +138,11 @@ func TestRequestParserMiddlewareReturnsErrorWhenSetURLParamsFails(t *testing.T) 
 
 	req := httptest.NewRequest("GET", "/", nil)
 
-	mc := &MockContext{}
-	mc.On("Request").Return(req)
-	mc.On("URLParams").Return(httprouter.Params{})
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+	mc := NewMockContext(ctrl)
+	mc.EXPECT().Request().Return(req)
+	mc.EXPECT().URLParams().Return(httprouter.Params{})
 
 	err := handle(mc)
 	assert.Error(t, err)
@@ -215,9 +222,11 @@ func TestRequestParserMiddlewareReturnsErrorWhenSetBodyFails(t *testing.T) {
 	req := httptest.NewRequest("POST", "/", bytes.NewBufferString("{}"))
 	req.Header.Set("content-type", contentTypeJSON)
 
-	mc := &MockContext{}
-	mc.On("Request").Return(req)
-	mc.On("URLParams").Return(httprouter.Params{})
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+	mc := NewMockContext(ctrl)
+	mc.EXPECT().Request().Return(req)
+	mc.EXPECT().URLParams().Return(httprouter.Params{})
 
 	err := handle(mc)
 	assert.Error(t, err)
@@ -303,10 +312,11 @@ func TestShouldCreateMethodHandlers(t *testing.T) {
 	for method, handle := range items {
 		// create a fake handler and assert that Handle was called when executing
 		// a request with the provided method
-		mh := &MockHandler{}
+		ctrl := gomock.NewController(t)
+		defer ctrl.Finish()
+		mh := NewMockHandler(ctrl)
 
-		mh.On("Handle", Anything).Run(func(args Arguments) {
-			c := args.Get(0).(Context)
+		mh.EXPECT().Handle(gomock.Any()).Do(func(c Context, args ...interface{}) {
 			assert.Equal(t, method, c.Request().Method)
 		}).Return(nil)
 
@@ -319,20 +329,20 @@ func TestShouldCreateMethodHandlers(t *testing.T) {
 
 		r.ServeHTTP(httptest.NewRecorder(), req)
 
-		mh.AssertCalled(t, "Handle", Anything)
 	}
 }
 
 func TestSimpleHandlerShouldWork(t *testing.T) {
 	r := NewRouter()
 
-	handler := &MockHandler{}
-	handler.On("Handle", Anything).Return(nil)
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+	handler := NewMockHandler(ctrl)
+	handler.EXPECT().Handle(gomock.Any()).Return(nil)
 
 	r.MethodFunc(http.MethodGet, "/", handler.Handle)
 
 	r.ServeHTTP(httptest.NewRecorder(), httptest.NewRequest("GET", "/", nil))
-	handler.AssertCalled(t, "Handle", Anything)
 }
 
 func TestShouldValidatePostWhenEmptyBody(t *testing.T) {
@@ -472,8 +482,10 @@ func TestHandleCallsErrorHandlerBeforeMiddleware(t *testing.T) {
 		}
 	})
 
-	mh := &MockHandler{}
-	mh.On("Handle", Anything).Run(func(Arguments) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+	mh := NewMockHandler(ctrl)
+	mh.EXPECT().Handle(gomock.Any()).Do(func(...interface{}) {
 		called <- "Handler"
 	}).Return(ErrForbidden)
 

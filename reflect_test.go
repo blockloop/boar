@@ -12,9 +12,9 @@ import (
 	"reflect"
 	"testing"
 
+	gomock "github.com/golang/mock/gomock"
 	"github.com/julienschmidt/httprouter"
 	"github.com/stretchr/testify/assert"
-	. "github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 )
 
@@ -191,11 +191,13 @@ func TestSetBodyShouldReturnValidationErrorWhenReadJSONFails(t *testing.T) {
 	}
 
 	expErr := errors.New("something went wrong")
-	mc := &MockContext{}
-	mc.On("ReadJSON", Anything).Return(expErr)
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+	mc := NewMockContext(ctrl)
+	mc.EXPECT().ReadJSON(gomock.Any()).Return(expErr)
 	req := httptest.NewRequest("GET", "/", bytes.NewBufferString("{}"))
 	req.Header.Set("content-type", contentTypeJSON)
-	mc.On("Request", Anything).Return(req)
+	mc.EXPECT().Request().Return(req)
 
 	err := setBody(reflect.Indirect(reflect.ValueOf(&handler)), mc)
 	if !assert.IsType(t, &ValidationError{}, err) {
@@ -210,14 +212,16 @@ func TestSetBodyShouldReturnValidationErrorWhenValidationFails(t *testing.T) {
 		}
 	}
 
-	mc := &MockContext{}
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+	mc := NewMockContext(ctrl)
 
 	req := httptest.NewRequest("GET", "/", bytes.NewBufferString("{}"))
 	req.Header.Set("content-type", contentTypeJSON)
-	mc.On("Request", Anything).Return(req)
+	mc.EXPECT().Request().Return(req)
 
-	mc.On("ReadJSON", Anything).Run(func(args Arguments) {
-		json.Unmarshal([]byte(`{"Name": "1234"}`), args.Get(0))
+	mc.EXPECT().ReadJSON(gomock.Any()).Do(func(v interface{}) {
+		json.Unmarshal([]byte(`{"Name": "1234"}`), v)
 	}).Return(nil)
 
 	err := setBody(reflect.Indirect(reflect.ValueOf(&handler)), mc)
@@ -234,8 +238,10 @@ func TestSetBodyShouldReturnErrorWhenUnknownContentType(t *testing.T) {
 
 	request := httptest.NewRequest("POST", "/", bytes.NewBufferString(`<xml></xml>`))
 	request.Header.Set("content-type", "application/xml")
-	mc := &MockContext{}
-	mc.On("Request").Return(request)
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+	mc := NewMockContext(ctrl)
+	mc.EXPECT().Request().Return(request)
 
 	err := setBody(reflect.Indirect(reflect.ValueOf(&handler)), mc)
 	require.Error(t, err)
@@ -250,8 +256,10 @@ func TestSetBodyUnknownContentTypeErrorShouldExplain(t *testing.T) {
 
 	request := httptest.NewRequest("POST", "/", bytes.NewBufferString(`<xml></xml>`))
 	request.Header.Set("content-type", "application/xml")
-	mc := &MockContext{}
-	mc.On("Request").Return(request)
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+	mc := NewMockContext(ctrl)
+	mc.EXPECT().Request().Return(request)
 
 	err := setBody(reflect.Indirect(reflect.ValueOf(&handler)), mc)
 	require.NotNil(t, err)
@@ -266,8 +274,10 @@ func TestSetBodyShouldRequireContentType(t *testing.T) {
 	}
 
 	request := httptest.NewRequest("POST", "/", nil)
-	mc := &MockContext{}
-	mc.On("Request").Return(request)
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+	mc := NewMockContext(ctrl)
+	mc.EXPECT().Request().Return(request)
 
 	err := setBody(reflect.Indirect(reflect.ValueOf(&handler)), mc)
 	assert.IsType(t, &httpError{}, err)
